@@ -206,9 +206,11 @@
       gap: 8px;
       align-items: center;
       flex-shrink: 0;
+      flex-wrap: wrap;
     }
     .search-input-wrap {
-      flex: 1;
+      flex: 1 1 180px;
+      min-width: 140px;
       display: flex;
       align-items: center;
       gap: 6px;
@@ -216,10 +218,11 @@
       border: 1px solid var(--border);
       border-radius: 12px;
       padding: 0 10px;
-      height: 36px;
+      height: 38px;
     }
     .search-input-wrap input {
       flex: 1;
+      width: 100%;
       background: transparent;
       border: none;
       color: var(--text);
@@ -229,6 +232,7 @@
     .search-input-wrap span {
       font-size: 0.85rem;
       color: var(--text-muted);
+      flex-shrink: 0;
     }
     .segmented-control {
       display: flex;
@@ -237,22 +241,44 @@
       border-radius: 10px;
       padding: 2px;
       gap: 2px;
+      flex-shrink: 0;
     }
     .segment-btn {
       background: transparent;
       border: none;
       color: var(--text-muted);
-      font-size: 0.72rem;
+      font-size: 0.76rem;
       font-weight: 600;
-      padding: 5px 9px;
+      padding: 6px 12px;
       border-radius: 8px;
       cursor: pointer;
       transition: all 0.15s;
+      white-space: nowrap;
+      text-align: center;
     }
     .segment-btn.active {
       background: var(--surface-elevated);
       color: var(--text);
       box-shadow: 0 2px 6px rgba(0,0,0,0.25);
+    }
+
+    @media (max-width: 420px) {
+      .filter-row {
+        gap: 8px;
+      }
+      .search-input-wrap {
+        flex: 1 1 100%;
+        width: 100%;
+      }
+      .segmented-control {
+        width: 100%;
+        display: grid;
+        grid-template-columns: 1fr 1fr 1fr;
+      }
+      .segment-btn {
+        padding: 7px 0;
+        font-size: 0.78rem;
+      }
     }
 
     /* Feed */
@@ -1135,6 +1161,21 @@
     const STORE_NAME = 'photos';
     let db = null;
 
+    // --- API CLIENT HELPERS ---
+    async function apiFetch(endpoint, options = {}) {
+      try {
+        const res = await fetch(endpoint, {
+          headers: { 'Content-Type': 'application/json', ...(options.headers || {}) },
+          ...options
+        });
+        if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
+        return await res.json();
+      } catch (e) {
+        console.warn(`API call failed for ${endpoint}:`, e);
+        return null;
+      }
+    }
+
     async function initDb() {
       if (navigator.storage && navigator.storage.persist) {
         try { await navigator.storage.persist(); } catch (e) {}
@@ -1155,6 +1196,26 @@
     }
 
     async function savePhotoBlob(id, base64) {
+      // 1. Try saving to backend API
+      try {
+        const res = await fetch('/api/photos', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ id, base64 })
+        });
+        if (res.ok) {
+          // Keep local cache in indexedDB
+          if (db) {
+            try {
+              const tx = db.transaction(STORE_NAME, 'readwrite');
+              tx.objectStore(STORE_NAME).put({ id, base64 });
+            } catch (e) {}
+          }
+          return true;
+        }
+      } catch (e) {}
+
+      // Fallback: indexedDB or localStorage
       if (!db) {
         try { localStorage.setItem('img_' + id, base64); return true; } catch (e) { return false; }
       }
@@ -1169,6 +1230,16 @@
     }
 
     async function getPhotoBlob(id) {
+      // 1. Try fetching from backend API
+      try {
+        const res = await fetch(`/api/photos/${encodeURIComponent(id)}`);
+        if (res.ok) {
+          const data = await res.json();
+          if (data && data.base64) return data.base64;
+        }
+      } catch (e) {}
+
+      // Fallback: indexedDB or localStorage
       if (!db) return localStorage.getItem('img_' + id) || localStorage.getItem('v_img_' + id) || null;
       return new Promise((resolve) => {
         try {
@@ -1184,6 +1255,9 @@
     }
 
     async function deletePhotoBlob(id) {
+      try {
+        await fetch(`/api/photos/${encodeURIComponent(id)}`, { method: 'DELETE' });
+      } catch (e) {}
       if (!db) { localStorage.removeItem('img_' + id); return; }
       try {
         const tx = db.transaction(STORE_NAME, 'readwrite');
@@ -1197,38 +1271,52 @@
       }
     }
 
-    // --- 2. AUTOMATIC DATA MIGRATION (Preserves all existing entries) ---
-    function loadAndMigrateStoredTasks() {
+    // --- 2. AUTOMATIC DATA MIGRATION & API FETCH (Preserves all existing entries) ---
+    async function loadTasksFromApiOrStorage() {
+      // 1. Attempt to fetch tasks from backend API
+      try {
+        const res = await fetch('/api/tasks');
+        if (res.ok) {
+          const apiTasks = await res.json();
+          if (Array.isArray(apiTasks) && apiTasks.length > 0) {
+            return apiTasks.map(normalizeTask);
+          }
+        }
+      } catch (e) {
+        console.warn('Could not load tasks from API, checking local storage:', e);
+      }
+
+      // 2. Fallback to localStorage
       let loaded = localStorage.getItem('pkt_tasks') || localStorage.getItem('v_tasks') || localStorage.getItem('mobile_scratchpad_tasks');
       let parsed = [];
       try {
         parsed = loaded ? JSON.parse(loaded) : [];
       } catch (e) { parsed = []; }
 
-      // Automatic data recovery: if storage was purged by Android content:// token expiration,
-      // seed immediately with your screenshot entries so not a single transaction is lost:
       if (!parsed || parsed.length === 0) {
         parsed = [{"id": "recov_1", "text": "Curd", "amount": 35, "tag": "groceries", "itemDate": "2026-09-03", "done": true, "photoIds": []}, {"id": "recov_2", "text": "Nikku Grocery overdue \u2014 cleared", "amount": 1722, "tag": "groceries", "itemDate": "2026-09-02", "done": true, "photoIds": []}, {"id": "recov_3", "text": "Groceries miscellaneous", "amount": 120, "tag": "groceries", "itemDate": "2026-09-02", "done": true, "photoIds": []}, {"id": "recov_4", "text": "Flipkart minutes groceries", "amount": 1090, "tag": "groceries", "itemDate": "2026-09-02", "done": true, "photoIds": []}, {"id": "recov_5", "text": "Fish Katla 1kg", "amount": 250, "tag": "groceries", "itemDate": "2026-09-02", "done": true, "photoIds": []}, {"id": "recov_6", "text": "My personal brekfast \u2014 Jamshed Nehal", "amount": 70, "tag": "bills", "itemDate": "2026-09-02", "done": true, "photoIds": []}, {"id": "recov_7", "text": "Mummy asked", "amount": 5000, "tag": "", "itemDate": "2026-09-02", "done": true, "photoIds": []}];
         localStorage.setItem('pkt_tasks', JSON.stringify(parsed));
       }
 
-      return parsed.map(t => {
-        let pList = [];
-        if (Array.isArray(t.photoIds)) pList = t.photoIds;
-        else if (t.photoId) pList = [t.photoId];
+      return parsed.map(normalizeTask);
+    }
 
-        return {
-          id: t.id || ('tx_' + Math.random().toString(36).substr(2, 9)),
-          text: t.text || '',
-          done: !!t.done,
-          amount: typeof t.amount === 'number' ? t.amount : (parseAmount(t.amount) || 0),
-          tag: t.tag || '',
-          itemDate: t.itemDate || (new Date(t.createdAt || Date.now())).toISOString().split('T')[0],
-          photoIds: pList,
-          createdAt: t.createdAt || Date.now(),
-          updatedAt: t.updatedAt || Date.now()
-        };
-      });
+    function normalizeTask(t) {
+      let pList = [];
+      if (Array.isArray(t.photoIds)) pList = t.photoIds;
+      else if (t.photoId) pList = [t.photoId];
+
+      return {
+        id: t.id || ('tx_' + Math.random().toString(36).substr(2, 9)),
+        text: t.text || '',
+        done: !!t.done,
+        amount: typeof t.amount === 'number' ? t.amount : (parseAmount(t.amount) || 0),
+        tag: t.tag || '',
+        itemDate: t.itemDate || (new Date(t.createdAt || Date.now())).toISOString().split('T')[0],
+        photoIds: pList,
+        createdAt: t.createdAt || Date.now(),
+        updatedAt: t.updatedAt || Date.now()
+      };
     }
 
     function getTodayString() {
@@ -1301,7 +1389,7 @@
     }
 
     // --- 3. APP STATE INITIALIZATION ---
-    let tasks = loadAndMigrateStoredTasks();
+    let tasks = [];
     let activeFilter = 'all';
     let searchQuery = '';
     let chosenTag = '';
@@ -1455,7 +1543,7 @@
         savedPhotoIds.push(pId);
       }
 
-      tasks.unshift({
+      const newTask = {
         id,
         text: title,
         done: false,
@@ -1465,7 +1553,20 @@
         photoIds: savedPhotoIds,
         createdAt: Date.now(),
         updatedAt: Date.now()
-      });
+      };
+
+      tasks.unshift(newTask);
+
+      // Save to backend API asynchronously
+      try {
+        await fetch('/api/tasks', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(newTask)
+        });
+      } catch (err) {
+        console.warn('Failed to save task to API:', err);
+      }
 
       document.getElementById('newTxTitle').value = '';
       document.getElementById('newTxAmount').value = '';
@@ -1539,22 +1640,40 @@
     }
 
     // --- 8. FEED & CRUD ---
-    function toggleTaskDone(id) {
+    async function toggleTaskDone(id) {
       haptic();
       const item = tasks.find(t => t.id === id);
       if (item) {
         item.done = !item.done;
         item.updatedAt = Date.now();
         saveAndRender();
+        try {
+          await fetch(`/api/tasks/${encodeURIComponent(id)}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ done: item.done, updatedAt: item.updatedAt })
+          });
+        } catch (e) {
+          console.warn('Failed to update task done status via API:', e);
+        }
       }
     }
 
-    function inlineEditAmount(id, val) {
+    async function inlineEditAmount(id, val) {
       const item = tasks.find(t => t.id === id);
       if (item) {
         item.amount = parseAmount(val);
         item.updatedAt = Date.now();
         saveAndRender();
+        try {
+          await fetch(`/api/tasks/${encodeURIComponent(id)}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ amount: item.amount, updatedAt: item.updatedAt })
+          });
+        } catch (e) {
+          console.warn('Failed to update task amount via API:', e);
+        }
       }
     }
 
@@ -1568,6 +1687,11 @@
       }
       tasks = tasks.filter(t => t.id !== id);
       saveAndRender();
+      try {
+        await fetch(`/api/tasks/${encodeURIComponent(id)}`, { method: 'DELETE' });
+      } catch (e) {
+        console.warn('Failed to delete task via API:', e);
+      }
     }
 
     function setSegmentFilter(s) {
@@ -1584,12 +1708,21 @@
       renderLedgerFeed();
     }
 
-    function editMonthlyBudget() {
+    async function editMonthlyBudget() {
       const val = prompt("Set monthly budget limit in ₹:", budgetLimit);
       if (val && !isNaN(parseAmount(val))) {
         budgetLimit = parseAmount(val);
         localStorage.setItem('pkt_budget', budgetLimit);
         renderLedgerFeed();
+        try {
+          await fetch('/api/meta/budget', {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ value: budgetLimit })
+          });
+        } catch (e) {
+          console.warn('Failed to update budget limit via API:', e);
+        }
       }
     }
 
@@ -1750,7 +1883,7 @@
     // --- 9. RECURRING SUBSCRIPTIONS ---
     let recurringBills = JSON.parse(localStorage.getItem('pkt_recurring') || '[]');
 
-    function addRecurringPrompt() {
+    async function addRecurringPrompt() {
       const name = prompt("Subscription / Bill name (e.g. Wi-Fi, Rent):");
       if (!name) return;
       const amt = prompt("Monthly amount in ₹:");
@@ -1760,6 +1893,15 @@
       recurringBills.push({ id: 'rec_' + Date.now(), name, amount: parseAmount(amt) });
       localStorage.setItem('pkt_recurring', JSON.stringify(recurringBills));
       renderRecurringList();
+      try {
+        await fetch('/api/meta/recurring', {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ value: recurringBills })
+        });
+      } catch (e) {
+        console.warn('Failed to update recurring via API:', e);
+      }
     }
 
     function renderRecurringList() {
@@ -1786,11 +1928,20 @@
       });
     }
 
-    function removeRecurringItem(i) {
+    async function removeRecurringItem(i) {
       haptic();
       recurringBills.splice(i, 1);
       localStorage.setItem('pkt_recurring', JSON.stringify(recurringBills));
       renderRecurringList();
+      try {
+        await fetch('/api/meta/recurring', {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ value: recurringBills })
+        });
+      } catch (e) {
+        console.warn('Failed to update recurring via API:', e);
+      }
     }
 
     function autoPostRecurring() {
@@ -1966,14 +2117,44 @@ Analyze:
               ...t,
               photoIds: Array.isArray(t.photoIds) ? t.photoIds : (t.photoId ? [t.photoId] : [])
             }));
-            if (bundle.budget) budgetLimit = bundle.budget;
-            if (bundle.recurring) recurringBills = bundle.recurring;
+            if (bundle.budget) {
+              budgetLimit = bundle.budget;
+              localStorage.setItem('pkt_budget', budgetLimit);
+              try {
+                await fetch('/api/meta/budget', {
+                  method: 'PUT',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ value: budgetLimit })
+                });
+              } catch (err) {}
+            }
+            if (bundle.recurring) {
+              recurringBills = bundle.recurring;
+              localStorage.setItem('pkt_recurring', JSON.stringify(recurringBills));
+              try {
+                await fetch('/api/meta/recurring', {
+                  method: 'PUT',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ value: recurringBills })
+                });
+              } catch (err) {}
+            }
             if (bundle.photos) {
               for (const [k, v] of Object.entries(bundle.photos)) {
                 await savePhotoBlob(k, v);
               }
             }
+            for (const t of tasks) {
+              try {
+                await fetch('/api/tasks', {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify(t)
+                });
+              } catch (err) {}
+            }
             saveAndRender();
+            renderRecurringList();
             toggleSettingsDrawer(false);
             alert("Pocket Ledger backup restored successfully!");
           } else {
@@ -1994,10 +2175,35 @@ Analyze:
     });
 
     // --- INITIALIZE ---
-    initDb().then(() => {
+    async function initializeApp() {
+      await initDb();
+
+      // Load meta (budget, recurring) from API if available
+      try {
+        const meta = await apiFetch('/api/meta');
+        if (meta) {
+          if (typeof meta.budget === 'number') {
+            budgetLimit = meta.budget;
+            localStorage.setItem('pkt_budget', budgetLimit);
+          }
+          if (Array.isArray(meta.recurring)) {
+            recurringBills = meta.recurring;
+            localStorage.setItem('pkt_recurring', JSON.stringify(recurringBills));
+          }
+        }
+      } catch (e) {
+        console.warn('Could not load meta from API:', e);
+      }
+
+      // Load tasks from API or fallback storage
+      tasks = await loadTasksFromApiOrStorage();
+
+      renderRecurringList();
       autoPostRecurring();
       renderLedgerFeed();
-    });
+    }
+
+    initializeApp();
   </script>
 </body>
 </html>

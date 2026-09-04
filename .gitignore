@@ -1,0 +1,6 @@
+backup-jsons/
+local_data/
+*.json
+!package*.json
+.env
+node_modules/

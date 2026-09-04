@@ -1,0 +1,35 @@
+version: '3.8'
+
+services:
+  mongo:
+    image: docker.io/library/mongo:6-jammy
+    container_name: pocket_ledger_mongo
+    restart: unless-stopped
+    volumes:
+      - mongo_data:/data/db
+    security_opt:
+      - no-new-privileges:true
+
+  api:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    image: localhost/pocket-ledger-api:latest
+    container_name: pocket_ledger_api
+    restart: unless-stopped
+    environment:
+      - PORT=8080
+      - MONGO_URI=mongodb://mongo:27017/personal_ledger
+      - STATIC_PATH=/app/src
+    volumes:
+      - ./src:/app/src:ro
+      - ./backup-jsons:/app/backup-jsons:ro
+    ports:
+      - "0.0.0.0:8080:8080"
+    depends_on:
+      - mongo
+    security_opt:
+      - no-new-privileges:true
+
+volumes:
+  mongo_data:
