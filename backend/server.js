@@ -13,6 +13,7 @@ app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ extended: true, limit: '50mb' }));
 
 // --- Mongoose Schemas & Models ---
+// Strict: false allows optional fields like isLent, borrowerName, settled without altering existing documents
 const TaskSchema = new mongoose.Schema({
   id: { type: String, required: true, unique: true, index: true },
   text: { type: String, default: '' },
@@ -21,9 +22,12 @@ const TaskSchema = new mongoose.Schema({
   tag: { type: String, default: '' },
   itemDate: { type: String, default: '' },
   photoIds: { type: [String], default: [] },
+  isLent: { type: Boolean, default: false },
+  borrowerName: { type: String, default: '' },
+  settled: { type: Boolean, default: false },
   createdAt: { type: Number, default: () => Date.now() },
   updatedAt: { type: Number, default: () => Date.now() }
-}, { versionKey: false });
+}, { versionKey: false, strict: false });
 
 const PhotoSchema = new mongoose.Schema({
   id: { type: String, required: true, unique: true, index: true },
@@ -42,6 +46,56 @@ const Meta = mongoose.model('Meta', MetaSchema);
 // --- Static Frontend Files ---
 const staticPath = path.resolve(__dirname, process.env.STATIC_PATH || '../src');
 app.use(express.static(staticPath));
+
+// --- FEATURE 4: Server-Side Tax-Ready CSV Export Endpoint ---
+app.get('/api/export/csv', async (req, res) => {
+  try {
+    const tasks = await Task.find({}).sort({ itemDate: -1, createdAt: -1 });
+
+    const escapeCsvField = (field) => {
+      if (field === null || field === undefined) return '""';
+      const str = String(field).replace(/"/g, '""');
+      return `"${str}"`;
+    };
+
+    const todayStr = new Date().toISOString().split('T')[0];
+    res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+    res.setHeader('Content-Disposition', `attachment; filename="pocket_ledger_tax_export_${todayStr}.csv"`);
+
+    // Stream header
+    res.write('ID,Date,Item,Amount,Tag,Status,HasReceipt,IsLent,Borrower,Settled\n');
+
+    for (const t of tasks) {
+      const hasReceipt = (Array.isArray(t.photoIds) && t.photoIds.length > 0) ? 'Yes' : 'No';
+      const status = t.done ? 'Done' : 'Pending';
+      const isLent = t.isLent ? 'Yes' : 'No';
+      const borrower = t.borrowerName || '';
+      const settled = t.settled ? 'Yes' : 'No';
+
+      const line = [
+        escapeCsvField(t.id),
+        escapeCsvField(t.itemDate || ''),
+        escapeCsvField(t.text || ''),
+        t.amount || 0,
+        escapeCsvField(t.tag || ''),
+        escapeCsvField(status),
+        escapeCsvField(hasReceipt),
+        escapeCsvField(isLent),
+        escapeCsvField(borrower),
+        escapeCsvField(settled)
+      ].join(',') + '\n';
+
+      res.write(line);
+    }
+
+    res.end();
+  } catch (err) {
+    console.error('CSV export failed:', err);
+    if (!res.headersSent) {
+      res.status(500).json({ error: 'Failed to export CSV: ' + err.message });
+    }
+  }
+});
 
 // --- Tasks CRUD Endpoints ---
 // GET all tasks
@@ -178,7 +232,7 @@ app.get('/api/meta/:key', async (req, res) => {
   }
 });
 
-// POST / PUT update meta (accepts object or single key)
+// POST / PUT update meta
 app.post('/api/meta', async (req, res) => {
   try {
     const data = req.body;
@@ -217,7 +271,7 @@ app.get('*', (req, res) => {
   res.sendFile(path.join(staticPath, 'index.html'));
 });
 
-// --- Seeding MongoDB Function ---
+// --- Seeding MongoDB Function (Initial Boot Only) ---
 async function seedDatabaseIfEmpty() {
   try {
     const taskCount = await Task.countDocuments();
@@ -229,13 +283,15 @@ async function seedDatabaseIfEmpty() {
     const backupPaths = [
       path.resolve(__dirname, 'backup.json'),
       path.resolve(__dirname, '../backup-jsons/pocket_ledger_backup_2026-09-04.json'),
-      path.resolve(__dirname, 'backup-jsons/pocket_ledger_backup_2026-09-04.json')
+      path.resolve(__dirname, 'backup-jsons/pocket_ledger_backup_2026-09-04.json'),
+      path.resolve(__dirname, '../backup-jsons/pocket_ledger_backup_2026-09-04 (3).json'),
+      path.resolve(__dirname, 'backup-jsons/pocket_ledger_backup_2026-09-04 (3).json')
     ];
 
     let backupFile = backupPaths.find(p => fs.existsSync(p));
 
     if (!backupFile) {
-      console.warn('[Seed] Backup file pocket_ledger_backup_2026-09-04.json not found. Checked:', backupPaths);
+      console.warn('[Seed] Backup file not found. Checked:', backupPaths);
       return;
     }
 
@@ -288,6 +344,93 @@ async function seedDatabaseIfEmpty() {
   }
 }
 
+// --- FEATURE 3: Automated Daily DB Snapshots (JSON Backup Daemon) ---
+async function runDailyBackupSnapshot() {
+  try {
+    const backupDir = path.resolve(__dirname, '../backup-jsons');
+    const altBackupDir = path.resolve(__dirname, 'backup-jsons');
+    const targetDir = fs.existsSync(backupDir) ? backupDir : (fs.existsSync(altBackupDir) ? altBackupDir : backupDir);
+
+    if (!fs.existsSync(targetDir)) {
+      try { fs.mkdirSync(targetDir, { recursive: true }); } catch (e) {}
+    }
+
+    const todayStr = new Date().toISOString().split('T')[0];
+    const targetFileName = `pocket_ledger_backup_${todayStr}.json`;
+    const targetFilePath = path.join(targetDir, targetFileName);
+
+    // Fetch collections
+    const [tasks, photosList, metaList] = await Promise.all([
+      Task.find({}).lean(),
+      Photo.find({}).lean(),
+      Meta.find({}).lean()
+    ]);
+
+    const photosObj = {};
+    photosList.forEach(p => { photosObj[p.id] = p.base64; });
+
+    let budget = 20000;
+    let recurring = [];
+    let version = 9;
+
+    metaList.forEach(m => {
+      if (m.key === 'budget') budget = m.value;
+      if (m.key === 'recurring') recurring = m.value;
+      if (m.key === 'version') version = m.value;
+    });
+
+    const snapshot = {
+      version,
+      budget,
+      recurring,
+      tasks,
+      photos: photosObj,
+      snapshotTimestamp: Date.now()
+    };
+
+    fs.writeFileSync(targetFilePath, JSON.stringify(snapshot, null, 2), 'utf8');
+    console.log(`[BackupDaemon] Saved daily snapshot: ${targetFilePath} (${tasks.length} tasks, ${photosList.length} photos)`);
+
+    // Retention policy: Keep only the last 7 daily backup files
+    try {
+      const files = fs.readdirSync(targetDir);
+      const backupFiles = files
+        .filter(f => f.startsWith('pocket_ledger_backup_') && f.endsWith('.json'))
+        .map(f => ({
+          name: f,
+          path: path.join(targetDir, f),
+          time: fs.statSync(path.join(targetDir, f)).mtime.getTime()
+        }))
+        .sort((a, b) => b.time - a.time);
+
+      if (backupFiles.length > 7) {
+        const toDelete = backupFiles.slice(7);
+        for (const item of toDelete) {
+          try {
+            fs.unlinkSync(item.path);
+            console.log(`[BackupDaemon] Pruned old backup: ${item.name}`);
+          } catch (e) {
+            console.warn(`[BackupDaemon] Could not prune ${item.name}:`, e.message);
+          }
+        }
+      }
+    } catch (cleanErr) {
+      console.warn('[BackupDaemon] Error pruning backups:', cleanErr.message);
+    }
+  } catch (err) {
+    console.error('[BackupDaemon] Snapshot failed:', err);
+  }
+}
+
+function initDailyBackupDaemon() {
+  // Run on startup
+  runDailyBackupSnapshot();
+  // Schedule every 24 hours (86,400,000 ms)
+  setInterval(() => {
+    runDailyBackupSnapshot();
+  }, 24 * 60 * 60 * 1000);
+}
+
 // Connect to MongoDB and start server
 async function start() {
   try {
@@ -296,6 +439,9 @@ async function start() {
     console.log('Connected to MongoDB.');
 
     await seedDatabaseIfEmpty();
+
+    // Start background daily snapshot daemon
+    initDailyBackupDaemon();
 
     app.listen(PORT, '0.0.0.0', () => {
       console.log(`personal-ledger server running on http://0.0.0.0:${PORT}`);

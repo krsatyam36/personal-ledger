@@ -197,6 +197,8 @@
       font-size: 0.72rem;
       color: var(--text-muted);
       font-weight: 500;
+      flex-wrap: wrap;
+      gap: 4px;
     }
 
     /* Filter & Search */
@@ -407,6 +409,32 @@
     .tag-badge {
       color: var(--accent);
       font-weight: 700;
+    }
+    .iou-badge {
+      background: rgba(245, 158, 11, 0.16);
+      color: #f59e0b;
+      padding: 1px 6px;
+      border-radius: 6px;
+      font-weight: 700;
+      font-size: 0.68rem;
+    }
+    .iou-badge.settled {
+      background: rgba(16, 185, 129, 0.16);
+      color: var(--green);
+    }
+    .btn-settle {
+      background: rgba(245, 158, 11, 0.2);
+      border: 1px solid rgba(245, 158, 11, 0.4);
+      color: #fbbf24;
+      font-size: 0.66rem;
+      font-weight: 700;
+      padding: 2px 7px;
+      border-radius: 6px;
+      cursor: pointer;
+      transition: all 0.15s;
+    }
+    .btn-settle:active {
+      transform: scale(0.95);
     }
     .card-amount-box {
       display: flex;
@@ -784,6 +812,7 @@
       overflow-x: auto;
       background: var(--surface);
       border-bottom: 1px solid var(--border);
+      -webkit-overflow-scrolling: touch;
     }
     .ai-pill {
       background: var(--surface-elevated);
@@ -795,6 +824,105 @@
       border-radius: 14px;
       white-space: nowrap;
       cursor: pointer;
+      transition: background 0.15s, border-color 0.15s;
+    }
+    .ai-pill:active {
+      background: var(--border);
+    }
+    .ai-tags-bar {
+      padding: 8px 16px;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      overflow-x: auto;
+      background: rgba(20, 23, 34, 0.6);
+      border-bottom: 1px solid var(--border);
+      -webkit-overflow-scrolling: touch;
+    }
+    .ai-tag-pill {
+      background: var(--accent-soft);
+      border: 1px solid rgba(99, 102, 241, 0.3);
+      color: var(--text);
+      font-size: 0.72rem;
+      font-weight: 700;
+      padding: 4px 10px;
+      border-radius: 12px;
+      white-space: nowrap;
+      cursor: pointer;
+      transition: all 0.15s;
+    }
+    .ai-tag-pill:active {
+      transform: scale(0.95);
+      background: var(--accent);
+      color: #fff;
+    }
+    .donut-card {
+      margin: 12px 16px 4px;
+      background: linear-gradient(145deg, var(--surface), var(--surface-elevated));
+      border: 1px solid var(--border);
+      border-radius: 18px;
+      padding: 14px;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      flex-shrink: 0;
+    }
+    .donut-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      font-size: 0.78rem;
+      font-weight: 700;
+      color: var(--text);
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+    }
+    .donut-content {
+      display: flex;
+      align-items: center;
+      gap: 16px;
+    }
+    .donut-chart-svg {
+      width: 110px;
+      height: 110px;
+      flex-shrink: 0;
+      transform: rotate(-90deg);
+    }
+    .donut-legend {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      gap: 5px;
+      max-height: 120px;
+      overflow-y: auto;
+      font-size: 0.74rem;
+    }
+    .legend-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 6px;
+    }
+    .legend-tag {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      color: var(--text);
+      font-weight: 600;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .legend-color-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      flex-shrink: 0;
+    }
+    .legend-val {
+      color: var(--text-muted);
+      font-weight: 500;
+      white-space: nowrap;
     }
     .ai-messages {
       flex: 1;
@@ -979,6 +1107,7 @@
         </div>
         <div class="wallet-meta">
           <span id="heroTodayTotal">Today: ₹0</span>
+          <span id="heroReceivableTotal" style="color:#fbbf24; font-weight:600;">IOUs: ₹0</span>
           <span id="heroRemainingTotal">Safe to spend: ₹20,000</span>
         </div>
       </div>
@@ -1013,6 +1142,23 @@
           <button class="ai-pill" onclick="copyEdgePayload()">📋 Copy for Edge Gallery</button>
           <button class="ai-pill" onclick="clearAiChat()">🧹 Clear</button>
         </div>
+        <!-- Feature 1: Dynamic #Hashtag Deep Dive Pills -->
+        <div class="ai-tags-bar" id="aiTagsBar"></div>
+
+        <!-- Feature 2: Pure SVG Category Donut Chart -->
+        <div class="donut-card" id="donutCard">
+          <div class="donut-header">
+            <span>Month Spend Distribution</span>
+            <span id="donutMonthLabel" style="color:var(--accent); font-size:0.72rem;"></span>
+          </div>
+          <div class="donut-content">
+            <svg class="donut-chart-svg" viewBox="0 0 42 42" id="donutSvg">
+              <!-- SVG donut circle segments dynamically generated -->
+            </svg>
+            <div class="donut-legend" id="donutLegend"></div>
+          </div>
+        </div>
+
         <div class="ai-messages" id="aiChatFeed">
           <div class="bubble bot">
             👋 <strong>Private On-Device AI Financial Analyst</strong><br>
@@ -1073,7 +1219,7 @@
       </div>
 
       <form onsubmit="saveNewTransaction(event)" style="display:flex; flex-direction:column; gap:12px;">
-        <input type="text" class="sheet-input-box" id="newTxTitle" placeholder="Item name (e.g. Vegetables, Dinner)" required autocomplete="off">
+        <input type="text" class="sheet-input-box" id="newTxTitle" placeholder="Item name (e.g. Vegetables, Dinner)" required autocomplete="off" oninput="handleTxTitleAutofill(this.value)">
 
         <div class="sheet-pill-tags">
           <span class="pill-tag selected" onclick="pickTag('')">#none</span>
@@ -1092,6 +1238,17 @@
         <div class="sheet-date-container">
           <span class="date-icon">📅</span>
           <input type="date" id="newTxDate" required>
+        </div>
+
+        <!-- Feature 6: Split Expenses & Lending Ledger (IOU Tracker) -->
+        <div style="display:flex; flex-direction:column; gap:8px; background:var(--surface-elevated); border:1px solid var(--border); border-radius:14px; padding:10px 14px;">
+          <label style="display:flex; justify-content:space-between; align-items:center; cursor:pointer; font-size:0.86rem; font-weight:600; color:var(--text);">
+            <span>🤝 Lent / Split IOU</span>
+            <input type="checkbox" id="newTxIsLent" style="width:18px; height:18px; accent-color:var(--accent);" onchange="toggleLentBorrowerField(this.checked)">
+          </label>
+          <div id="newTxBorrowerWrap" style="display:none; margin-top:2px;">
+            <input type="text" id="newTxBorrower" placeholder="Borrower name (e.g. Rahul, Roommate)" style="width:100%; background:var(--surface); border:1px solid var(--border); border-radius:10px; padding:8px 12px; color:var(--text); font-size:0.82rem; outline:none;">
+          </div>
         </div>
 
         <!-- Multi-photo staging preview strip -->
@@ -1314,6 +1471,9 @@
         tag: t.tag || '',
         itemDate: t.itemDate || (new Date(t.createdAt || Date.now())).toISOString().split('T')[0],
         photoIds: pList,
+        isLent: !!t.isLent,
+        borrowerName: t.borrowerName || '',
+        settled: !!t.settled,
         createdAt: t.createdAt || Date.now(),
         updatedAt: t.updatedAt || Date.now()
       };
@@ -1469,10 +1629,38 @@
     function openExpenseSheet() {
       haptic();
       document.getElementById('newTxDate').value = getTodayString();
+      document.getElementById('newTxIsLent').checked = false;
+      document.getElementById('newTxBorrowerWrap').style.display = 'none';
+      document.getElementById('newTxBorrower').value = '';
       stagedPhotos = [];
       renderStagedPhotos();
       document.getElementById('expenseSheet').classList.add('active');
       setTimeout(() => document.getElementById('newTxTitle').focus(), 150);
+    }
+
+    function toggleLentBorrowerField(checked) {
+      const wrap = document.getElementById('newTxBorrowerWrap');
+      wrap.style.display = checked ? 'block' : 'none';
+      if (checked) {
+        setTimeout(() => document.getElementById('newTxBorrower').focus(), 100);
+      }
+    }
+
+    // Feature 5: Smart Merchant & Category Tag Autofill
+    function handleTxTitleAutofill(title) {
+      if (!title || title.trim().length < 2) return;
+      const query = title.trim().toLowerCase();
+
+      // Find best match in memory
+      for (const t of tasks) {
+        const pastText = (t.text || '').toLowerCase();
+        if (!t.tag) continue;
+        // Exact match, word match, or substring match
+        if (pastText === query || pastText.includes(query) || query.includes(pastText)) {
+          pickTag(t.tag);
+          break;
+        }
+      }
     }
 
     function closeExpenseSheet() {
@@ -1533,9 +1721,11 @@
       haptic();
       const date = document.getElementById('newTxDate').value || getTodayString();
       const amt = parseAmount(document.getElementById('newTxAmount').value);
+      const isLent = document.getElementById('newTxIsLent').checked;
+      const borrowerName = isLent ? (document.getElementById('newTxBorrower').value.trim() || 'Someone') : '';
       const id = 'tx_' + Date.now() + '_' + Math.random().toString(36).substr(2, 4);
 
-      // Save each staged photo to IndexedDB
+      // Save each staged photo to IndexedDB / API
       const savedPhotoIds = [];
       for (let i = 0; i < stagedPhotos.length; i++) {
         const pId = `img_${id}_${i}`;
@@ -1551,6 +1741,9 @@
         tag: chosenTag,
         itemDate: date,
         photoIds: savedPhotoIds,
+        isLent,
+        borrowerName,
+        settled: false,
         createdAt: Date.now(),
         updatedAt: Date.now()
       };
@@ -1570,6 +1763,9 @@
 
       document.getElementById('newTxTitle').value = '';
       document.getElementById('newTxAmount').value = '';
+      document.getElementById('newTxIsLent').checked = false;
+      document.getElementById('newTxBorrower').value = '';
+      document.getElementById('newTxBorrowerWrap').style.display = 'none';
       stagedPhotos = [];
       renderStagedPhotos();
       closeExpenseSheet();
@@ -1750,15 +1946,23 @@
 
       let todayTotal = 0;
       let monthTotal = 0;
+      let pendingReceivables = 0;
+
       tasks.forEach(t => {
         const amt = parseFloat(t.amount) || 0;
-        if (t.itemDate === today) todayTotal += amt;
-        if ((t.itemDate || '').startsWith(currentMonth)) monthTotal += amt;
+        if (t.isLent && !t.settled) {
+          pendingReceivables += amt;
+        } else if (!t.isLent) {
+          // Regular personal consumption
+          if (t.itemDate === today) todayTotal += amt;
+          if ((t.itemDate || '').startsWith(currentMonth)) monthTotal += amt;
+        }
       });
 
       document.getElementById('heroTodayTotal').textContent = `Today: ₹${todayTotal.toLocaleString('en-IN')}`;
       document.getElementById('heroMonthTotal').textContent = monthTotal.toLocaleString('en-IN');
       document.getElementById('heroLimitBtn').textContent = `Limit: ₹${budgetLimit.toLocaleString('en-IN')} ✎`;
+      document.getElementById('heroReceivableTotal').textContent = `IOUs: ₹${pendingReceivables.toLocaleString('en-IN')}`;
 
       const remaining = Math.max(budgetLimit - monthTotal, 0);
       document.getElementById('heroRemainingTotal').textContent = `Safe to spend: ₹${remaining.toLocaleString('en-IN')}`;
@@ -1767,6 +1971,10 @@
       const bar = document.getElementById('heroProgressBar');
       bar.style.width = pct + '%';
       bar.style.background = pct > 90 ? 'var(--red)' : (pct > 75 ? '#f59e0b' : 'var(--green)');
+
+      // Re-render dynamic AI hashtag pills & donut chart
+      renderAiHashtagBar();
+      renderAiDonutChart();
 
       if (filtered.length === 0) {
         feed.innerHTML = `
@@ -1825,6 +2033,19 @@
             }
           }
 
+          // Lent / IOU Tag badge & Settle button
+          let iouHtml = '';
+          if (t.isLent) {
+            if (t.settled) {
+              iouHtml = `<span class="iou-badge settled">🤝 Lent to ${escapeHTML(t.borrowerName || 'Someone')} (Settled)</span>`;
+            } else {
+              iouHtml = `
+                <span class="iou-badge">🤝 Lent to ${escapeHTML(t.borrowerName || 'Someone')}</span>
+                <button class="btn-settle" onclick="settleUpLentTask('${t.id}')">Settle Up</button>
+              `;
+            }
+          }
+
           itemCard.innerHTML = `
             <div class="card-check" onclick="toggleTaskDone('${t.id}')"></div>
             ${thumbsHtml}
@@ -1832,6 +2053,7 @@
               <span class="card-title">${escapeHTML(t.text)}</span>
               <div class="card-tags">
                 ${t.tag ? `<span class="tag-badge">#${escapeHTML(t.tag)}</span>` : ''}
+                ${iouHtml}
                 <span>${formatTime(t.createdAt)}</span>
               </div>
             </div>
@@ -1968,6 +2190,190 @@
       }
     }
 
+    // Feature 6: One-tap Settle Up for Lent Tasks
+    async function settleUpLentTask(id) {
+      haptic();
+      const item = tasks.find(t => t.id === id);
+      if (item) {
+        item.settled = true;
+        item.updatedAt = Date.now();
+        saveAndRender();
+        try {
+          await fetch(`/api/tasks/${encodeURIComponent(id)}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ settled: true, updatedAt: item.updatedAt })
+          });
+        } catch (e) {
+          console.warn('Failed to settle lent task via API:', e);
+        }
+      }
+    }
+
+    // Feature 1: Interactive #Hashtag Deep Dive in AI Analyst
+    function renderAiHashtagBar() {
+      const bar = document.getElementById('aiTagsBar');
+      if (!bar) return;
+      bar.innerHTML = '';
+
+      const tagSet = new Set();
+      tasks.forEach(t => {
+        if (t.tag && t.tag.trim()) tagSet.add(t.tag.trim().toLowerCase());
+      });
+
+      if (tagSet.size === 0) {
+        bar.style.display = 'none';
+        return;
+      }
+
+      bar.style.display = 'flex';
+      const label = document.createElement('span');
+      label.style.fontSize = '0.7rem';
+      label.style.color = 'var(--text-muted)';
+      label.style.fontWeight = '700';
+      label.textContent = 'TAGS:';
+      bar.appendChild(label);
+
+      Array.from(tagSet).sort().forEach(tag => {
+        const pill = document.createElement('button');
+        pill.className = 'ai-tag-pill';
+        pill.textContent = `#${tag}`;
+        pill.onclick = () => triggerTagDeepDive(tag);
+        bar.appendChild(pill);
+      });
+    }
+
+    function triggerTagDeepDive(rawTag) {
+      haptic();
+      const tag = rawTag.toLowerCase().replace('#', '').trim();
+      const today = getTodayString();
+      const currentMonth = today.slice(0, 7);
+
+      // Filter transactions matching tag
+      const matching = tasks.filter(t => (t.tag || '').toLowerCase() === tag);
+      const lifetimeTotal = matching.reduce((sum, t) => sum + (parseFloat(t.amount) || 0), 0);
+
+      const monthMatching = matching.filter(t => (t.itemDate || '').startsWith(currentMonth));
+      const monthTagTotal = monthMatching.reduce((sum, t) => sum + (parseFloat(t.amount) || 0), 0);
+
+      // Overall month expenditure (excluding unsettled lent items)
+      let overallMonthSpend = 0;
+      tasks.forEach(t => {
+        if (!t.isLent && (t.itemDate || '').startsWith(currentMonth)) {
+          overallMonthSpend += (parseFloat(t.amount) || 0);
+        }
+      });
+
+      const monthSharePct = overallMonthSpend > 0 ? ((monthTagTotal / overallMonthSpend) * 100).toFixed(1) : '0.0';
+
+      // Sort matching descending by date
+      const sorted = [...matching].sort((a, b) => (b.itemDate || '').localeCompare(a.itemDate || '') || (b.createdAt - a.createdAt));
+
+      appendChat('user', `🏷️ Deep Dive: #${tag}`);
+
+      let breakdownList = sorted.slice(0, 10).map(t => {
+        const lentNote = t.isLent ? ` (Lent to ${escapeHTML(t.borrowerName || 'Someone')})` : '';
+        return `• <strong>${escapeHTML(t.itemDate || 'No Date')}</strong>: ${escapeHTML(t.text)} — ₹${(parseFloat(t.amount)||0).toLocaleString('en-IN')}${lentNote}`;
+      }).join('<br>');
+
+      if (sorted.length > 10) {
+        breakdownList += `<br><em>...and ${sorted.length - 10} more transactions.</em>`;
+      }
+
+      const responseHtml = `
+        <strong>🏷️ #${tag.toUpperCase()} EXPENDITURE DEEP DIVE</strong><br><br>
+        • <strong>This Month Spend:</strong> ₹${monthTagTotal.toLocaleString('en-IN')} (${monthMatching.length} items)<br>
+        • <strong>Monthly Share:</strong> ${monthSharePct}% of total monthly expenditure<br>
+        • <strong>Lifetime Total:</strong> ₹${lifetimeTotal.toLocaleString('en-IN')} (${matching.length} items)<br><br>
+        <strong>Itemized Breakdown (Recent):</strong><br>
+        ${breakdownList || 'No entries logged under this tag.'}
+      `;
+
+      appendChat('bot', responseHtml);
+    }
+
+    // Feature 2: Pure SVG Category Breakdown Donut Chart
+    function renderAiDonutChart() {
+      const svg = document.getElementById('donutSvg');
+      const legend = document.getElementById('donutLegend');
+      const label = document.getElementById('donutMonthLabel');
+      if (!svg || !legend) return;
+
+      const today = getTodayString();
+      const currentMonth = today.slice(0, 7);
+      if (label) label.textContent = currentMonth;
+
+      const categoryTotals = {};
+      let totalMonthAmount = 0;
+
+      tasks.forEach(t => {
+        if (!t.isLent && (t.itemDate || '').startsWith(currentMonth)) {
+          const amt = parseFloat(t.amount) || 0;
+          const tag = (t.tag && t.tag.trim()) ? `#${t.tag.trim()}` : '#untagged';
+          categoryTotals[tag] = (categoryTotals[tag] || 0) + amt;
+          totalMonthAmount += amt;
+        }
+      });
+
+      const entries = Object.entries(categoryTotals).sort((a, b) => b[1] - a[1]);
+
+      if (totalMonthAmount === 0 || entries.length === 0) {
+        svg.innerHTML = `
+          <circle cx="21" cy="21" r="15.91549430918954" fill="transparent" stroke="var(--border)" stroke-width="5"></circle>
+          <text x="50%" y="50%" dominant-baseline="central" text-anchor="middle" fill="var(--text-muted)" font-size="5" transform="rotate(90 21 21)">Empty</text>
+        `;
+        legend.innerHTML = '<div style="color:var(--text-muted); font-size:0.75rem;">No spending recorded for this month.</div>';
+        return;
+      }
+
+      const palette = [
+        '#6366f1', '#10b981', '#f59e0b', '#ec4899', '#3b82f6',
+        '#8b5cf6', '#14b8a6', '#f97316', '#06b6d4', '#84cc16'
+      ];
+
+      // Circumference of radius 15.91549430918954 is exactly 100
+      let strokeOffset = 0;
+      let svgCircles = '';
+      let legendHtml = '';
+
+      entries.forEach(([cat, val], idx) => {
+        const color = palette[idx % palette.length];
+        const pct = (val / totalMonthAmount) * 100;
+        const pctFormatted = pct.toFixed(1);
+
+        svgCircles += `
+          <circle cx="21" cy="21" r="15.91549430918954"
+            fill="transparent"
+            stroke="${color}"
+            stroke-width="5"
+            stroke-dasharray="${pct} ${100 - pct}"
+            stroke-dashoffset="${-strokeOffset}">
+          </circle>
+        `;
+        strokeOffset += pct;
+
+        legendHtml += `
+          <div class="legend-row">
+            <span class="legend-tag">
+              <span class="legend-color-dot" style="background:${color};"></span>
+              ${escapeHTML(cat)}
+            </span>
+            <span class="legend-val">₹${val.toLocaleString('en-IN')} (${pctFormatted}%)</span>
+          </div>
+        `;
+      });
+
+      // Overlay center text in donut hole
+      svgCircles += `
+        <text x="50%" y="50%" dominant-baseline="central" text-anchor="middle" fill="var(--text)" font-weight="800" font-size="5" transform="rotate(90 21 21)">
+          ₹${totalMonthAmount > 999 ? Math.round(totalMonthAmount / 1000) + 'k' : totalMonthAmount}
+        </text>
+      `;
+
+      svg.innerHTML = svgCircles;
+      legend.innerHTML = legendHtml;
+    }
+
     // --- 10. AI ANALYST & EDGE GALLERY ---
     function buildMonthlySummaryPayload() {
       const today = getTodayString();
@@ -2043,12 +2449,22 @@ Analyze:
       appendChat('user', escapeHTML(q));
       inp.value = '';
 
+      // Feature 1: Check if user typed a hashtag in query (e.g. #groceries, "How much on #dining?", etc.)
+      const hashtagMatch = q.match(/#([a-zA-Z0-9_-]+)/i);
+      if (hashtagMatch) {
+        const foundTag = hashtagMatch[1].toLowerCase();
+        setTimeout(() => {
+          triggerTagDeepDive(foundTag);
+        }, 150);
+        return;
+      }
+
       const data = buildMonthlySummaryPayload();
       setTimeout(() => {
         let resp = `<strong>📊 Month Analysis (${data.month}):</strong><br><br>`;
         resp += `• <strong>Total Spent:</strong> ₹${data.total.toLocaleString('en-IN')} across ${data.count} items.<br>`;
         resp += `• <strong>Budget Status:</strong> ${data.total > budgetLimit ? '⚠️ Over budget!' : '✅ Within limit of ₹' + budgetLimit.toLocaleString('en-IN')}<br><br>`;
-        resp += `<em>💡 Pro-tip:</em> Tap <strong>"Copy for Edge Gallery"</strong> above to run this through Gemma on your phone's NPU!`;
+        resp += `<em>💡 Pro-tip:</em> Tap any <strong>#tag</strong> pill above to view itemized breakdowns, or tap <strong>"Copy for Edge Gallery"</strong>!`;
         appendChat('bot', resp);
       }, 300);
     }
@@ -2065,17 +2481,23 @@ Analyze:
     // --- 11. EXPORTS & BACKUPS ---
     function exportSpreadsheetCSV() {
       haptic();
-      let csv = "data:text/csv;charset=utf-8,ID,Date,Item,Amount,Tag,Status\n";
-      tasks.forEach(t => {
-        csv += `${t.id},${t.itemDate},"${(t.text||'').replace(/"/g, '""')}",${t.amount||0},${t.tag||''},${t.done?'Done':'Pending'}\n`;
-      });
-      const uri = encodeURI(csv);
-      const a = document.createElement('a');
-      a.href = uri;
-      a.download = `pocket_ledger_${getTodayString()}.csv`;
-      document.body.appendChild(a);
-      a.click();
-      a.remove();
+      try {
+        window.open('/api/export/csv', '_blank');
+      } catch (e) {
+        // Fallback to client-side CSV if window.open fails
+        let csv = "data:text/csv;charset=utf-8,ID,Date,Item,Amount,Tag,Status,HasReceipt,IsLent,Borrower,Settled\n";
+        tasks.forEach(t => {
+          const hasReceipt = (Array.isArray(t.photoIds) && t.photoIds.length > 0) ? 'Yes' : 'No';
+          csv += `${t.id},${t.itemDate},"${(t.text||'').replace(/"/g, '""')}",${t.amount||0},${t.tag||''},${t.done?'Done':'Pending'},${hasReceipt},${t.isLent?'Yes':'No'},"${(t.borrowerName||'').replace(/"/g, '""')}",${t.settled?'Yes':'No'}\n`;
+        });
+        const uri = encodeURI(csv);
+        const a = document.createElement('a');
+        a.href = uri;
+        a.download = `pocket_ledger_${getTodayString()}.csv`;
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+      }
     }
 
     async function exportFullJsonBackup() {

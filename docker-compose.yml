@@ -23,7 +23,8 @@ services:
       - STATIC_PATH=/app/src
     volumes:
       - ./src:/app/src:ro
-      - ./backup-jsons:/app/backup-jsons:ro
+      - ./backend/server.js:/app/server.js:ro
+      - ./backup-jsons:/app/backup-jsons:rw
     ports:
       - "0.0.0.0:8080:8080"
     depends_on:
