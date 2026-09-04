@@ -1,0 +1,2003 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>Pocket Ledger</title>
+  <style>
+    :root {
+      --bg: #0b0d14;
+      --surface: #141722;
+      --surface-elevated: #1c2130;
+      --border: rgba(255, 255, 255, 0.08);
+      --border-focus: rgba(99, 102, 241, 0.5);
+      --text: #f8fafc;
+      --text-muted: #8b95a8;
+      --accent: #6366f1;
+      --accent-soft: rgba(99, 102, 241, 0.14);
+      --green: #10b981;
+      --green-soft: rgba(16, 185, 129, 0.12);
+      --red: #f43f5e;
+      --font: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", Roboto, sans-serif;
+    }
+
+    body[data-theme="amoled"] {
+      --bg: #000000;
+      --surface: #0a0a0a;
+      --surface-elevated: #141414;
+      --border: #222222;
+    }
+
+    body[data-theme="nord"] {
+      --bg: #242933;
+      --surface: #2e3440;
+      --surface-elevated: #3b4252;
+      --border: #4c566a;
+      --text: #eceff4;
+      --text-muted: #9aa5b8;
+      --accent: #88c0d0;
+      --green: #a3be8c;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      -webkit-tap-highlight-color: transparent;
+    }
+
+    body {
+      font-family: var(--font);
+      background: var(--bg);
+      color: var(--text);
+      display: flex;
+      flex-direction: column;
+      height: 100dvh;
+      overflow: hidden;
+      user-select: none;
+      -webkit-user-select: none;
+    }
+
+    header {
+      padding: 14px 18px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      background: var(--bg);
+      flex-shrink: 0;
+      z-index: 10;
+    }
+    .brand-group {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .brand-badge {
+      width: 28px;
+      height: 28px;
+      border-radius: 8px;
+      background: var(--accent);
+      color: #fff;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: 800;
+      font-size: 0.95rem;
+    }
+    .brand-title {
+      font-size: 1.12rem;
+      font-weight: 800;
+      letter-spacing: -0.02em;
+    }
+    .header-actions {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .btn-circle {
+      width: 36px;
+      height: 36px;
+      border-radius: 50%;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      color: var(--text-muted);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 1rem;
+      cursor: pointer;
+      transition: all 0.15s ease;
+    }
+    .btn-circle:active {
+      transform: scale(0.92);
+      background: var(--surface-elevated);
+      color: var(--text);
+    }
+
+    main {
+      flex: 1;
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+      position: relative;
+    }
+    .tab-panel {
+      display: none;
+      flex-direction: column;
+      height: 100%;
+      overflow: hidden;
+    }
+    .tab-panel.active {
+      display: flex;
+    }
+
+    /* Hero Balance Card */
+    .wallet-hero {
+      margin: 0 16px 10px;
+      background: linear-gradient(145deg, var(--surface), var(--surface-elevated));
+      border: 1px solid var(--border);
+      border-radius: 18px;
+      padding: 14px 16px;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      flex-shrink: 0;
+      box-shadow: 0 8px 24px rgba(0, 0, 0, 0.25);
+    }
+    .wallet-top {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    .wallet-label {
+      font-size: 0.72rem;
+      font-weight: 600;
+      color: var(--text-muted);
+      letter-spacing: 0.05em;
+      text-transform: uppercase;
+    }
+    .wallet-budget-btn {
+      font-size: 0.72rem;
+      color: var(--accent);
+      background: var(--accent-soft);
+      padding: 3px 8px;
+      border-radius: 8px;
+      font-weight: 600;
+      cursor: pointer;
+    }
+    .wallet-balance {
+      font-size: 1.85rem;
+      font-weight: 800;
+      letter-spacing: -0.03em;
+      display: flex;
+      align-items: baseline;
+      gap: 4px;
+    }
+    .wallet-balance span.symbol {
+      font-size: 1.25rem;
+      color: var(--green);
+      font-weight: 700;
+    }
+    .progress-track {
+      height: 6px;
+      background: rgba(255, 255, 255, 0.06);
+      border-radius: 3px;
+      overflow: hidden;
+    }
+    .progress-bar {
+      height: 100%;
+      width: 0%;
+      background: var(--green);
+      border-radius: 3px;
+      transition: width 0.35s cubic-bezier(0.4, 0, 0.2, 1), background 0.3s;
+    }
+    .wallet-meta {
+      display: flex;
+      justify-content: space-between;
+      font-size: 0.72rem;
+      color: var(--text-muted);
+      font-weight: 500;
+    }
+
+    /* Filter & Search */
+    .filter-row {
+      padding: 0 16px 10px;
+      display: flex;
+      gap: 8px;
+      align-items: center;
+      flex-shrink: 0;
+    }
+    .search-input-wrap {
+      flex: 1;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 0 10px;
+      height: 36px;
+    }
+    .search-input-wrap input {
+      flex: 1;
+      background: transparent;
+      border: none;
+      color: var(--text);
+      font-size: 0.82rem;
+      outline: none;
+    }
+    .search-input-wrap span {
+      font-size: 0.85rem;
+      color: var(--text-muted);
+    }
+    .segmented-control {
+      display: flex;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 2px;
+      gap: 2px;
+    }
+    .segment-btn {
+      background: transparent;
+      border: none;
+      color: var(--text-muted);
+      font-size: 0.72rem;
+      font-weight: 600;
+      padding: 5px 9px;
+      border-radius: 8px;
+      cursor: pointer;
+      transition: all 0.15s;
+    }
+    .segment-btn.active {
+      background: var(--surface-elevated);
+      color: var(--text);
+      box-shadow: 0 2px 6px rgba(0,0,0,0.25);
+    }
+
+    /* Feed */
+    .feed-scroll {
+      flex: 1;
+      overflow-y: auto;
+      padding: 0 16px 88px;
+      -webkit-overflow-scrolling: touch;
+    }
+    .day-section {
+      margin-bottom: 18px;
+    }
+    .day-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 6px 2px 8px;
+      font-size: 0.76rem;
+      font-weight: 700;
+      color: var(--text-muted);
+      letter-spacing: 0.02em;
+    }
+    .day-total {
+      color: var(--green);
+      font-weight: 800;
+      font-size: 0.8rem;
+    }
+    .transaction-cards {
+      display: flex;
+      flex-direction: column;
+      gap: 7px;
+    }
+    .card-item {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      padding: 11px 13px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      transition: transform 0.15s ease, background 0.15s;
+    }
+    .card-item:active {
+      background: var(--surface-elevated);
+      transform: scale(0.99);
+    }
+    .card-check {
+      width: 20px;
+      height: 20px;
+      border-radius: 50%;
+      border: 2px solid var(--border);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      flex-shrink: 0;
+      transition: all 0.2s;
+    }
+    .card-item.done .card-check {
+      background: var(--accent);
+      border-color: var(--accent);
+    }
+    .card-check::after {
+      content: "✓";
+      color: white;
+      font-size: 0.65rem;
+      font-weight: 800;
+      opacity: 0;
+      transform: scale(0.5);
+      transition: all 0.2s;
+    }
+    .card-item.done .card-check::after {
+      opacity: 1;
+      transform: scale(1);
+    }
+
+    /* Multi-thumbnail strip in card */
+    .thumbs-strip {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      flex-shrink: 0;
+    }
+    .card-thumb {
+      width: 38px;
+      height: 38px;
+      border-radius: 8px;
+      object-fit: cover;
+      cursor: pointer;
+      border: 1px solid var(--border);
+    }
+    .thumb-badge {
+      font-size: 0.65rem;
+      background: var(--surface-elevated);
+      color: var(--accent);
+      padding: 2px 4px;
+      border-radius: 4px;
+      font-weight: 700;
+    }
+
+    .card-body {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+      overflow: hidden;
+    }
+    .card-title {
+      font-size: 0.92rem;
+      font-weight: 600;
+      color: var(--text);
+      word-break: break-word;
+    }
+    .card-item.done .card-title {
+      text-decoration: line-through;
+      color: var(--text-muted);
+      opacity: 0.6;
+    }
+    .card-tags {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 0.7rem;
+      color: var(--text-muted);
+    }
+    .tag-badge {
+      color: var(--accent);
+      font-weight: 700;
+    }
+    .card-amount-box {
+      display: flex;
+      align-items: baseline;
+      font-size: 0.95rem;
+      font-weight: 800;
+      color: var(--green);
+      flex-shrink: 0;
+    }
+    .card-amount-box input {
+      width: 58px;
+      background: transparent;
+      border: none;
+      outline: none;
+      color: var(--green);
+      font-size: 0.92rem;
+      font-weight: 800;
+      text-align: right;
+      font-family: inherit;
+    }
+    .card-del {
+      color: var(--border);
+      background: none;
+      border: none;
+      font-size: 1.1rem;
+      cursor: pointer;
+      padding: 0 0 0 4px;
+      line-height: 1;
+    }
+    .card-del:active {
+      color: var(--red);
+    }
+
+    /* FAB (+) */
+    .fab-btn {
+      position: fixed;
+      bottom: 76px;
+      right: 20px;
+      width: 54px;
+      height: 54px;
+      border-radius: 27px;
+      background: var(--accent);
+      color: #fff;
+      border: none;
+      font-size: 1.7rem;
+      font-weight: 300;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      box-shadow: 0 8px 24px rgba(99, 102, 241, 0.4);
+      cursor: pointer;
+      z-index: 40;
+      transition: transform 0.2s cubic-bezier(0.34, 1.56, 0.64, 1);
+    }
+    .fab-btn:active {
+      transform: scale(0.9);
+    }
+
+    /* Bottom Navigation Bar */
+    nav.bottom-bar {
+      background: var(--surface);
+      border-top: 1px solid var(--border);
+      display: flex;
+      justify-content: space-around;
+      padding: 6px 0 max(8px, env(safe-area-inset-bottom));
+      flex-shrink: 0;
+      z-index: 30;
+    }
+    .nav-tab {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 3px;
+      background: none;
+      border: none;
+      color: var(--text-muted);
+      font-size: 0.7rem;
+      font-weight: 600;
+      padding: 4px 14px;
+      cursor: pointer;
+      transition: color 0.15s;
+    }
+    .nav-tab span.icon {
+      font-size: 1.15rem;
+    }
+    .nav-tab.active {
+      color: var(--accent);
+    }
+
+    /* =========================================================
+       BOTTOM SHEET (Multi-image preview strip + spacious date)
+       ========================================================= */
+    .sheet-scrim {
+      display: none;
+      position: fixed;
+      inset: 0;
+      background: rgba(0, 0, 0, 0.65);
+      backdrop-filter: blur(6px);
+      z-index: 100;
+      align-items: flex-end;
+    }
+    .sheet-scrim.active {
+      display: flex;
+    }
+    .sheet-card {
+      width: 100%;
+      background: var(--surface);
+      border-top-left-radius: 24px;
+      border-top-right-radius: 24px;
+      border-top: 1px solid var(--border);
+      padding: 14px 18px max(20px, env(safe-area-inset-bottom));
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+      box-shadow: 0 -12px 36px rgba(0, 0, 0, 0.6);
+      animation: sheetUp 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+      max-height: 90vh;
+      overflow-y: auto;
+    }
+    @keyframes sheetUp {
+      from { transform: translateY(100%); }
+      to { transform: translateY(0); }
+    }
+    .sheet-grabber {
+      width: 36px;
+      height: 4px;
+      border-radius: 2px;
+      background: var(--border);
+      align-self: center;
+      margin-bottom: 2px;
+    }
+    .sheet-title-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    .sheet-title-row h3 {
+      font-size: 1.05rem;
+      font-weight: 700;
+    }
+    .sheet-input-box {
+      background: var(--surface-elevated);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      padding: 12px 14px;
+      font-size: 0.95rem;
+      color: var(--text);
+      outline: none;
+      width: 100%;
+      font-family: inherit;
+    }
+    .sheet-input-box:focus {
+      border-color: var(--border-focus);
+    }
+    
+    .sheet-amount-container {
+      width: 100%;
+      display: flex;
+      align-items: center;
+      background: var(--surface-elevated);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      padding: 0 14px;
+    }
+    .sheet-amount-container span.curr {
+      color: var(--green);
+      font-weight: 800;
+      font-size: 1.15rem;
+      margin-right: 6px;
+    }
+    .sheet-amount-container input {
+      flex: 1;
+      background: transparent;
+      border: none;
+      color: var(--green);
+      font-size: 1.1rem;
+      font-weight: 800;
+      padding: 12px 0;
+      outline: none;
+      font-family: inherit;
+    }
+
+    .sheet-date-container {
+      width: 100%;
+      display: flex;
+      align-items: center;
+      background: var(--surface-elevated);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      padding: 0 14px;
+      gap: 8px;
+    }
+    .sheet-date-container span.date-icon {
+      font-size: 1rem;
+      color: var(--text-muted);
+    }
+    .sheet-date-container input[type="date"] {
+      flex: 1;
+      background: transparent;
+      border: none;
+      color: var(--text);
+      font-size: 0.92rem;
+      font-weight: 600;
+      padding: 12px 0;
+      outline: none;
+      font-family: inherit;
+      width: 100%;
+    }
+
+    .sheet-pill-tags {
+      display: flex;
+      gap: 6px;
+      overflow-x: auto;
+      padding-bottom: 2px;
+    }
+    .pill-tag {
+      background: var(--surface-elevated);
+      border: 1px solid var(--border);
+      color: var(--text-muted);
+      font-size: 0.75rem;
+      font-weight: 600;
+      padding: 6px 12px;
+      border-radius: 10px;
+      cursor: pointer;
+      white-space: nowrap;
+    }
+    .pill-tag.selected {
+      background: var(--accent-soft);
+      border-color: var(--accent);
+      color: var(--accent);
+    }
+
+    /* Multi-Photo Staging Area in Sheet */
+    .staged-photos-strip {
+      display: none;
+      align-items: center;
+      gap: 8px;
+      overflow-x: auto;
+      padding: 4px 2px;
+    }
+    .staged-photo-wrap {
+      position: relative;
+      width: 48px;
+      height: 48px;
+      border-radius: 10px;
+      overflow: hidden;
+      border: 1px solid var(--border);
+      flex-shrink: 0;
+    }
+    .staged-photo-wrap img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+    }
+    .staged-photo-remove {
+      position: absolute;
+      top: 2px;
+      right: 2px;
+      width: 16px;
+      height: 16px;
+      border-radius: 50%;
+      background: rgba(0,0,0,0.7);
+      color: #fff;
+      font-size: 10px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+    }
+
+    .sheet-buttons {
+      display: flex;
+      gap: 10px;
+      margin-top: 4px;
+    }
+    .btn-camera {
+      width: 48px;
+      height: 48px;
+      border-radius: 14px;
+      background: var(--surface-elevated);
+      border: 1px solid var(--border);
+      color: var(--text-muted);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 1.25rem;
+      cursor: pointer;
+      flex-shrink: 0;
+    }
+    .btn-save-tx {
+      flex: 1;
+      background: var(--accent);
+      color: #fff;
+      border: none;
+      border-radius: 14px;
+      font-size: 0.95rem;
+      font-weight: 700;
+      cursor: pointer;
+      height: 48px;
+    }
+
+    /* Slide-Over Settings & Drawer */
+    .drawer-overlay {
+      display: none;
+      position: fixed;
+      inset: 0;
+      background: rgba(0, 0, 0, 0.6);
+      backdrop-filter: blur(4px);
+      z-index: 200;
+      justify-content: flex-end;
+    }
+    .drawer-overlay.active {
+      display: flex;
+    }
+    .drawer-panel {
+      width: 84%;
+      max-width: 320px;
+      background: var(--surface);
+      height: 100%;
+      padding: 20px 18px;
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+      box-shadow: -10px 0 30px rgba(0,0,0,0.5);
+      animation: drawerSlide 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+    }
+    @keyframes drawerSlide {
+      from { transform: translateX(100%); }
+      to { transform: translateY(0); }
+    }
+    .drawer-head {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      border-bottom: 1px solid var(--border);
+      padding-bottom: 10px;
+    }
+    .drawer-head h3 {
+      font-size: 1.05rem;
+      font-weight: 700;
+    }
+    .drawer-label {
+      font-size: 0.72rem;
+      text-transform: uppercase;
+      font-weight: 700;
+      color: var(--text-muted);
+      letter-spacing: 0.05em;
+      margin-top: 4px;
+    }
+    .drawer-item-btn {
+      background: var(--surface-elevated);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 12px 14px;
+      color: var(--text);
+      font-size: 0.88rem;
+      font-weight: 600;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      cursor: pointer;
+    }
+
+    /* AI Analyst */
+    .ai-wrapper {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      height: 100%;
+    }
+    .ai-action-pills {
+      padding: 10px 16px;
+      display: flex;
+      gap: 6px;
+      overflow-x: auto;
+      background: var(--surface);
+      border-bottom: 1px solid var(--border);
+    }
+    .ai-pill {
+      background: var(--surface-elevated);
+      border: 1px solid var(--border);
+      color: var(--text);
+      font-size: 0.72rem;
+      font-weight: 600;
+      padding: 5px 11px;
+      border-radius: 14px;
+      white-space: nowrap;
+      cursor: pointer;
+    }
+    .ai-messages {
+      flex: 1;
+      overflow-y: auto;
+      padding: 14px 16px;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+    .bubble {
+      max-width: 88%;
+      padding: 10px 14px;
+      border-radius: 14px;
+      font-size: 0.86rem;
+      line-height: 1.5;
+    }
+    .bubble.bot {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      align-self: flex-start;
+    }
+    .bubble.user {
+      background: var(--accent);
+      color: #fff;
+      align-self: flex-end;
+    }
+    .ai-bar {
+      padding: 10px 16px max(12px, env(safe-area-inset-bottom));
+      background: var(--surface);
+      border-top: 1px solid var(--border);
+      display: flex;
+      gap: 8px;
+    }
+    .ai-bar input {
+      flex: 1;
+      background: var(--surface-elevated);
+      border: 1px solid var(--border);
+      border-radius: 20px;
+      padding: 9px 14px;
+      font-size: 0.88rem;
+      color: var(--text);
+      outline: none;
+    }
+
+    /* Recurring Subscriptions */
+    .rec-wrapper {
+      padding: 16px;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+      overflow-y: auto;
+    }
+    .rec-item {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      padding: 12px 14px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    /* Notes */
+    .notes-input {
+      flex: 1;
+      width: 100%;
+      background: transparent;
+      border: none;
+      color: var(--text);
+      font-family: inherit;
+      font-size: 1rem;
+      line-height: 1.6;
+      padding: 18px;
+      outline: none;
+      resize: none;
+    }
+
+    /* Lightbox Modal */
+    .lightbox-screen {
+      display: none;
+      position: fixed;
+      inset: 0;
+      background: rgba(0, 0, 0, 0.92);
+      z-index: 500;
+      align-items: center;
+      justify-content: center;
+      padding: 16px;
+    }
+    .lightbox-screen.active {
+      display: flex;
+    }
+    .lightbox-screen img {
+      max-width: 100%;
+      max-height: 80vh;
+      border-radius: 12px;
+      object-fit: contain;
+    }
+
+    /* PIN Lock Screen */
+    #lockScreen {
+      display: none;
+      position: fixed;
+      inset: 0;
+      background: var(--bg);
+      z-index: 1000;
+      align-items: center;
+      justify-content: center;
+      padding: 24px;
+    }
+    .lock-card {
+      width: 100%;
+      max-width: 280px;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 20px;
+      padding: 28px 20px;
+      text-align: center;
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+    }
+    .lock-card input {
+      background: var(--surface-elevated);
+      border: 1px solid var(--border);
+      color: var(--text);
+      font-size: 1.5rem;
+      letter-spacing: 0.4em;
+      text-align: center;
+      padding: 10px;
+      border-radius: 12px;
+      outline: none;
+    }
+  </style>
+  <link rel="manifest" href="manifest.json">
+  <script>
+    if ('serviceWorker' in navigator) {
+      window.addEventListener('load', () => {
+        navigator.serviceWorker.register('./sw.js').catch(() => {});
+      });
+    }
+  </script>
+</head>
+<body data-theme="dark">
+
+  <!-- PIN Screen -->
+  <div id="lockScreen">
+    <div class="lock-card">
+      <div style="font-size: 2rem;">🔒</div>
+      <h3 style="font-size: 1.05rem;">Pocket Ledger Locked</h3>
+      <input type="password" id="pinField" maxlength="4" placeholder="••••" oninput="verifyPin(this.value)">
+      <div style="font-size: 0.75rem; color: var(--text-muted);">Enter your 4-digit PIN</div>
+    </div>
+  </div>
+
+  <!-- App Header -->
+  <header>
+    <div class="brand-group">
+      <div class="brand-badge">₹</div>
+      <h1 class="brand-title">Pocket Ledger</h1>
+    </div>
+    <div class="header-actions">
+      <button class="btn-circle" onclick="quickParseSms()" title="Paste Bank/UPI SMS">📲</button>
+      <button class="btn-circle" onclick="toggleSettingsDrawer(true)" title="Settings & Data">⚙️</button>
+    </div>
+  </header>
+
+  <!-- Main Body Panels -->
+  <main>
+    <!-- 1. LEDGER FEED -->
+    <section id="panelLedger" class="tab-panel active">
+      <!-- Wallet Dashboard Hero -->
+      <div class="wallet-hero">
+        <div class="wallet-top">
+          <span class="wallet-label">This Month</span>
+          <span class="wallet-budget-btn" id="heroLimitBtn" onclick="editMonthlyBudget()">Limit: ₹20,000 ✎</span>
+        </div>
+        <div class="wallet-balance">
+          <span class="symbol">₹</span><span id="heroMonthTotal">0</span>
+        </div>
+        <div class="progress-track">
+          <div class="progress-bar" id="heroProgressBar"></div>
+        </div>
+        <div class="wallet-meta">
+          <span id="heroTodayTotal">Today: ₹0</span>
+          <span id="heroRemainingTotal">Safe to spend: ₹20,000</span>
+        </div>
+      </div>
+
+      <!-- Search & Status Segment Filter -->
+      <div class="filter-row">
+        <div class="search-input-wrap">
+          <span>🔍</span>
+          <input type="text" id="searchInput" placeholder="Search entries or #tags..." oninput="onSearchChange(this.value)">
+        </div>
+        <div class="segmented-control">
+          <button class="segment-btn active" id="segAll" onclick="setSegmentFilter('all')">All</button>
+          <button class="segment-btn" id="segActive" onclick="setSegmentFilter('active')">Pending</button>
+          <button class="segment-btn" id="segDone" onclick="setSegmentFilter('done')">Done</button>
+        </div>
+      </div>
+
+      <!-- Feed -->
+      <div class="feed-scroll" id="ledgerFeed"></div>
+
+      <!-- FAB (+) -->
+      <button class="fab-btn" onclick="openExpenseSheet()" title="Add Transaction">+</button>
+    </section>
+
+    <!-- 2. AI ANALYST -->
+    <section id="panelAI" class="tab-panel">
+      <div class="ai-wrapper">
+        <div class="ai-action-pills">
+          <button class="ai-pill" onclick="aiQuickAsk('month')">📊 Month Breakdown</button>
+          <button class="ai-pill" onclick="aiQuickAsk('top')">💸 Top Expenses</button>
+          <button class="ai-pill" onclick="aiQuickAsk('velocity')">📈 Daily Burn Rate</button>
+          <button class="ai-pill" onclick="copyEdgePayload()">📋 Copy for Edge Gallery</button>
+          <button class="ai-pill" onclick="clearAiChat()">🧹 Clear</button>
+        </div>
+        <div class="ai-messages" id="aiChatFeed">
+          <div class="bubble bot">
+            👋 <strong>Private On-Device AI Financial Analyst</strong><br>
+            I calculate your daily burn rates, detect outlier expenses, and prepare offline data payloads for Google AI Edge Gallery / Gemma models. Ask a question or tap a pill above!
+          </div>
+        </div>
+        <form class="ai-bar" onsubmit="handleAiChat(event)">
+          <input type="text" id="aiUserInput" placeholder="Ask about this month's budget..." autocomplete="off">
+          <button type="submit" class="btn-circle" style="background:var(--accent); color:white; border:none;">➤</button>
+        </form>
+      </div>
+    </section>
+
+    <!-- 3. RECURRING BILLS -->
+    <section id="panelRecurring" class="tab-panel">
+      <div class="rec-wrapper">
+        <div style="display:flex; justify-content:space-between; align-items:center;">
+          <h4 style="font-size:0.95rem; font-weight:700;">Monthly Subscriptions</h4>
+          <button class="ai-pill" onclick="addRecurringPrompt()">+ Add Bill</button>
+        </div>
+        <div id="recurringFeed" style="display:flex; flex-direction:column; gap:8px;"></div>
+      </div>
+    </section>
+
+    <!-- 4. QUICK NOTES -->
+    <section id="panelNotes" class="tab-panel">
+      <textarea id="notesEditor" class="notes-input" placeholder="Quick notes, checklist scratchpad, or flight links..."></textarea>
+    </section>
+  </main>
+
+  <!-- Bottom Navigation Bar -->
+  <nav class="bottom-bar">
+    <button class="nav-tab active" onclick="navigateTab('ledger')">
+      <span class="icon">📋</span>
+      <span>Ledger</span>
+    </button>
+    <button class="nav-tab" onclick="navigateTab('ai')">
+      <span class="icon">🤖</span>
+      <span>Analyst</span>
+    </button>
+    <button class="nav-tab" onclick="navigateTab('recurring')">
+      <span class="icon">🔁</span>
+      <span>Recurring</span>
+    </button>
+    <button class="nav-tab" onclick="navigateTab('notes')">
+      <span class="icon">📝</span>
+      <span>Notes</span>
+    </button>
+  </nav>
+
+  <!-- Slide-Up Bottom Sheet (Add Transaction - Multi-Photo + Full Date View) -->
+  <div class="sheet-scrim" id="expenseSheet" onclick="closeExpenseSheet(event)">
+    <div class="sheet-card" onclick="event.stopPropagation()">
+      <div class="sheet-grabber"></div>
+      <div class="sheet-title-row">
+        <h3>Add Expense</h3>
+        <button class="btn-circle" id="voiceMicBtn" onclick="toggleVoiceDictation()">🎙️</button>
+      </div>
+
+      <form onsubmit="saveNewTransaction(event)" style="display:flex; flex-direction:column; gap:12px;">
+        <input type="text" class="sheet-input-box" id="newTxTitle" placeholder="Item name (e.g. Vegetables, Dinner)" required autocomplete="off">
+
+        <div class="sheet-pill-tags">
+          <span class="pill-tag selected" onclick="pickTag('')">#none</span>
+          <span class="pill-tag" onclick="pickTag('groceries')">#groceries</span>
+          <span class="pill-tag" onclick="pickTag('dining')">#dining</span>
+          <span class="pill-tag" onclick="pickTag('transport')">#transport</span>
+          <span class="pill-tag" onclick="pickTag('shopping')">#shopping</span>
+          <span class="pill-tag" onclick="pickTag('bills')">#bills</span>
+        </div>
+
+        <div class="sheet-amount-container">
+          <span class="curr">₹</span>
+          <input type="text" id="newTxAmount" placeholder="Amount (e.g. 377 or 6.5k)" autocomplete="off">
+        </div>
+
+        <div class="sheet-date-container">
+          <span class="date-icon">📅</span>
+          <input type="date" id="newTxDate" required>
+        </div>
+
+        <!-- Multi-photo staging preview strip -->
+        <div class="staged-photos-strip" id="stagedPhotosStrip"></div>
+
+        <div class="sheet-buttons">
+          <label class="btn-camera" id="sheetCameraLabel" title="Add one or more receipt photos">
+            📷
+            <input type="file" id="sheetCameraFile" accept="image/*" multiple capture="environment" style="display:none" onchange="handleMultipleReceiptFiles(event)">
+          </label>
+          <button type="submit" class="btn-save-tx">Save Entry</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Slide-Over Settings & Data Drawer -->
+  <div class="drawer-overlay" id="settingsDrawer" onclick="toggleSettingsDrawer(false)">
+    <div class="drawer-panel" onclick="event.stopPropagation()">
+      <div class="drawer-head">
+        <h3>Settings & Data</h3>
+        <button class="btn-circle" onclick="toggleSettingsDrawer(false)">✕</button>
+      </div>
+
+      <div class="drawer-label">Theme</div>
+      <div style="display:flex; gap:6px;">
+        <button class="ai-pill" id="btnThemeDark" onclick="applyAppTheme('dark')">Dark</button>
+        <button class="ai-pill" id="btnThemeAmoled" onclick="applyAppTheme('amoled')">AMOLED</button>
+        <button class="ai-pill" id="btnThemeNord" onclick="applyAppTheme('nord')">Nord</button>
+      </div>
+
+      <div class="drawer-label">Security</div>
+      <button class="drawer-item-btn" onclick="togglePinSecurity()">
+        <span>App PIN Lock</span>
+        <span id="labelPinStatus" style="color:var(--text-muted); font-size:0.8rem;">Off</span>
+      </button>
+
+      <div class="drawer-label">Data & Backup</div>
+      <button class="drawer-item-btn" onclick="exportSpreadsheetCSV()">
+        <span>Export Spreadsheet</span>
+        <span>.CSV</span>
+      </button>
+      <button class="drawer-item-btn" onclick="exportFullJsonBackup()">
+        <span>Full Backup (with Photos)</span>
+        <span>.JSON</span>
+      </button>
+      <button class="drawer-item-btn" onclick="document.getElementById('importFileElem').click()">
+        <span>Restore from Backup</span>
+        <span>Upload</span>
+      </button>
+      <input type="file" id="importFileElem" accept="application/json" style="display:none" onchange="importFullJsonBackup(event)">
+
+      <div style="margin-top:auto; font-size:0.75rem; color:var(--text-muted); text-align:center;">
+        Pocket Ledger · 100% Offline Device Storage
+      </div>
+    </div>
+  </div>
+
+  <!-- Lightbox Modal -->
+  <div class="lightbox-screen" id="lightboxScreen" onclick="dismissLightbox()">
+    <img id="lightboxTargetImg" src="" alt="Receipt Photo">
+  </div>
+
+  <script>
+    // --- 1. PERSISTENT STORAGE (Supports PocketLedgerDB & PocketVaultDB) ---
+    const DB_NAME = 'PocketLedgerDB';
+    const STORE_NAME = 'photos';
+    let db = null;
+
+    async function initDb() {
+      if (navigator.storage && navigator.storage.persist) {
+        try { await navigator.storage.persist(); } catch (e) {}
+      }
+      return new Promise((resolve) => {
+        try {
+          const req = indexedDB.open(DB_NAME, 1);
+          req.onupgradeneeded = (e) => {
+            const dbRef = e.target.result;
+            if (!dbRef.objectStoreNames.contains(STORE_NAME)) {
+              dbRef.createObjectStore(STORE_NAME, { keyPath: 'id' });
+            }
+          };
+          req.onsuccess = (e) => { db = e.target.result; resolve(db); };
+          req.onerror = () => { resolve(null); };
+        } catch (err) { resolve(null); }
+      });
+    }
+
+    async function savePhotoBlob(id, base64) {
+      if (!db) {
+        try { localStorage.setItem('img_' + id, base64); return true; } catch (e) { return false; }
+      }
+      return new Promise((resolve) => {
+        try {
+          const tx = db.transaction(STORE_NAME, 'readwrite');
+          tx.objectStore(STORE_NAME).put({ id, base64 });
+          tx.oncomplete = () => resolve(true);
+          tx.onerror = () => resolve(false);
+        } catch (e) { resolve(false); }
+      });
+    }
+
+    async function getPhotoBlob(id) {
+      if (!db) return localStorage.getItem('img_' + id) || localStorage.getItem('v_img_' + id) || null;
+      return new Promise((resolve) => {
+        try {
+          const tx = db.transaction(STORE_NAME, 'readonly');
+          const req = tx.objectStore(STORE_NAME).get(id);
+          req.onsuccess = () => {
+            if (req.result) resolve(req.result.base64);
+            else resolve(localStorage.getItem('img_' + id) || localStorage.getItem('v_img_' + id) || null);
+          };
+          req.onerror = () => resolve(null);
+        } catch (e) { resolve(null); }
+      });
+    }
+
+    async function deletePhotoBlob(id) {
+      if (!db) { localStorage.removeItem('img_' + id); return; }
+      try {
+        const tx = db.transaction(STORE_NAME, 'readwrite');
+        tx.objectStore(STORE_NAME).delete(id);
+      } catch (e) {}
+    }
+
+    function haptic() {
+      if ('vibrate' in navigator) {
+        try { navigator.vibrate(15); } catch (e) {}
+      }
+    }
+
+    // --- 2. AUTOMATIC DATA MIGRATION (Preserves all existing entries) ---
+    function loadAndMigrateStoredTasks() {
+      let loaded = localStorage.getItem('pkt_tasks') || localStorage.getItem('v_tasks') || localStorage.getItem('mobile_scratchpad_tasks');
+      let parsed = [];
+      try {
+        parsed = loaded ? JSON.parse(loaded) : [];
+      } catch (e) { parsed = []; }
+
+      // Automatic data recovery: if storage was purged by Android content:// token expiration,
+      // seed immediately with your screenshot entries so not a single transaction is lost:
+      if (!parsed || parsed.length === 0) {
+        parsed = [{"id": "recov_1", "text": "Curd", "amount": 35, "tag": "groceries", "itemDate": "2026-09-03", "done": true, "photoIds": []}, {"id": "recov_2", "text": "Nikku Grocery overdue \u2014 cleared", "amount": 1722, "tag": "groceries", "itemDate": "2026-09-02", "done": true, "photoIds": []}, {"id": "recov_3", "text": "Groceries miscellaneous", "amount": 120, "tag": "groceries", "itemDate": "2026-09-02", "done": true, "photoIds": []}, {"id": "recov_4", "text": "Flipkart minutes groceries", "amount": 1090, "tag": "groceries", "itemDate": "2026-09-02", "done": true, "photoIds": []}, {"id": "recov_5", "text": "Fish Katla 1kg", "amount": 250, "tag": "groceries", "itemDate": "2026-09-02", "done": true, "photoIds": []}, {"id": "recov_6", "text": "My personal brekfast \u2014 Jamshed Nehal", "amount": 70, "tag": "bills", "itemDate": "2026-09-02", "done": true, "photoIds": []}, {"id": "recov_7", "text": "Mummy asked", "amount": 5000, "tag": "", "itemDate": "2026-09-02", "done": true, "photoIds": []}];
+        localStorage.setItem('pkt_tasks', JSON.stringify(parsed));
+      }
+
+      return parsed.map(t => {
+        let pList = [];
+        if (Array.isArray(t.photoIds)) pList = t.photoIds;
+        else if (t.photoId) pList = [t.photoId];
+
+        return {
+          id: t.id || ('tx_' + Math.random().toString(36).substr(2, 9)),
+          text: t.text || '',
+          done: !!t.done,
+          amount: typeof t.amount === 'number' ? t.amount : (parseAmount(t.amount) || 0),
+          tag: t.tag || '',
+          itemDate: t.itemDate || (new Date(t.createdAt || Date.now())).toISOString().split('T')[0],
+          photoIds: pList,
+          createdAt: t.createdAt || Date.now(),
+          updatedAt: t.updatedAt || Date.now()
+        };
+      });
+    }
+
+    function getTodayString() {
+      const d = new Date();
+      return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+    }
+
+    function parseAmount(val) {
+      if (!val) return 0;
+      let s = String(val).trim().toLowerCase().replace(/₹|,/g, '');
+      if (s.endsWith('k')) {
+        const num = parseFloat(s.slice(0, -1));
+        return isNaN(num) ? 0 : Math.round(num * 1000);
+      }
+      const num = parseFloat(s);
+      return isNaN(num) ? 0 : num;
+    }
+
+    function formatDisplayDate(ymd) {
+      if (!ymd) return "No Date";
+      const parts = ymd.split('-');
+      if (parts.length !== 3) return ymd;
+      const day = parseInt(parts[2], 10);
+      const moIdx = parseInt(parts[1], 10) - 1;
+      const months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+      const prefix = (ymd === getTodayString()) ? "Today · " : "";
+      return `${prefix}${day} ${months[moIdx]}`;
+    }
+
+    function formatTime(ts) {
+      const d = new Date(ts);
+      let h = d.getHours();
+      const m = String(d.getMinutes()).padStart(2, '0');
+      const ampm = h >= 12 ? 'pm' : 'am';
+      h = h % 12 || 12;
+      return `${h}:${m} ${ampm}`;
+    }
+
+    function escapeHTML(str) {
+      return String(str).replace(/[&<>'"]/g, 
+        tag => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;' }[tag] || tag)
+      );
+    }
+
+    function compressReceipt(file) {
+      return new Promise((resolve) => {
+        const reader = new FileReader();
+        reader.onload = (ev) => {
+          const img = new Image();
+          img.onload = () => {
+            let w = img.width;
+            let h = img.height;
+            const max = 1000;
+            if (w > h && w > max) { h = Math.round((h * max) / w); w = max; }
+            else if (h > max) { w = Math.round((w * max) / h); h = max; }
+
+            const canvas = document.createElement('canvas');
+            canvas.width = w;
+            canvas.height = h;
+            const ctx = canvas.getContext('2d');
+            ctx.drawImage(img, 0, 0, w, h);
+            resolve(canvas.toDataURL('image/jpeg', 0.72));
+          };
+          img.onerror = () => resolve(null);
+          img.src = ev.target.result;
+        };
+        reader.onerror = () => resolve(null);
+        reader.readAsDataURL(file);
+      });
+    }
+
+    // --- 3. APP STATE INITIALIZATION ---
+    let tasks = loadAndMigrateStoredTasks();
+    let activeFilter = 'all';
+    let searchQuery = '';
+    let chosenTag = '';
+    let stagedPhotos = []; // Multi-photo support
+    let budgetLimit = parseFloat(localStorage.getItem('pkt_budget')) || parseFloat(localStorage.getItem('v_budget')) || 20000;
+
+    // --- 4. PIN SECURITY ---
+    let appPin = localStorage.getItem('pkt_pin') || localStorage.getItem('v_pin') || '';
+    if (appPin) {
+      document.getElementById('lockScreen').style.display = 'flex';
+      document.getElementById('labelPinStatus').textContent = 'On';
+    }
+
+    function verifyPin(val) {
+      if (val === appPin) {
+        haptic();
+        document.getElementById('lockScreen').style.display = 'none';
+        document.getElementById('pinField').value = '';
+      }
+    }
+
+    function togglePinSecurity() {
+      if (appPin) {
+        if (confirm("Remove PIN lock?")) {
+          localStorage.removeItem('pkt_pin');
+          localStorage.removeItem('v_pin');
+          appPin = '';
+          document.getElementById('labelPinStatus').textContent = 'Off';
+          alert("PIN removed.");
+        }
+      } else {
+        const p = prompt("Enter a 4-digit PIN:");
+        if (p && p.length === 4 && !isNaN(p)) {
+          localStorage.setItem('pkt_pin', p);
+          appPin = p;
+          document.getElementById('labelPinStatus').textContent = 'On';
+          alert("PIN activated!");
+        } else if (p) {
+          alert("Invalid PIN. Enter exactly 4 digits.");
+        }
+      }
+    }
+
+    // --- 5. THEMES ---
+    function applyAppTheme(t) {
+      haptic();
+      document.body.setAttribute('data-theme', t);
+      localStorage.setItem('pkt_theme', t);
+      document.querySelectorAll('#settingsDrawer .ai-pill').forEach(c => c.style.borderColor = '');
+      if (t === 'dark') document.getElementById('btnThemeDark').style.borderColor = 'var(--accent)';
+      if (t === 'amoled') document.getElementById('btnThemeAmoled').style.borderColor = 'var(--accent)';
+      if (t === 'nord') document.getElementById('btnThemeNord').style.borderColor = 'var(--accent)';
+    }
+    const savedTheme = localStorage.getItem('pkt_theme') || 'dark';
+    applyAppTheme(savedTheme);
+
+    // --- 6. NAVIGATION TABS ---
+    function navigateTab(tab) {
+      haptic();
+      const tabs = ['ledger', 'ai', 'recurring', 'notes'];
+      tabs.forEach((t, i) => {
+        document.querySelectorAll('.nav-tab')[i].classList.toggle('active', t === tab);
+      });
+      document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
+
+      if (tab === 'ledger') document.getElementById('panelLedger').classList.add('active');
+      else if (tab === 'ai') document.getElementById('panelAI').classList.add('active');
+      else if (tab === 'recurring') {
+        document.getElementById('panelRecurring').classList.add('active');
+        renderRecurringList();
+      } else {
+        document.getElementById('panelNotes').classList.add('active');
+      }
+    }
+
+    // --- 7. BOTTOM SHEET & MULTI-PHOTO UPLOAD ---
+    function openExpenseSheet() {
+      haptic();
+      document.getElementById('newTxDate').value = getTodayString();
+      stagedPhotos = [];
+      renderStagedPhotos();
+      document.getElementById('expenseSheet').classList.add('active');
+      setTimeout(() => document.getElementById('newTxTitle').focus(), 150);
+    }
+
+    function closeExpenseSheet() {
+      haptic();
+      document.getElementById('expenseSheet').classList.remove('active');
+    }
+
+    function pickTag(tag) {
+      chosenTag = tag;
+      document.querySelectorAll('.pill-tag').forEach(c => {
+        c.classList.toggle('selected', c.textContent === '#' + (tag || 'none'));
+      });
+    }
+
+    async function handleMultipleReceiptFiles(e) {
+      const files = Array.from(e.target.files);
+      if (!files.length) return;
+      haptic();
+      for (const file of files) {
+        const b64 = await compressReceipt(file);
+        if (b64) stagedPhotos.push(b64);
+      }
+      renderStagedPhotos();
+    }
+
+    function renderStagedPhotos() {
+      const strip = document.getElementById('stagedPhotosStrip');
+      strip.innerHTML = '';
+      if (stagedPhotos.length === 0) {
+        strip.style.display = 'none';
+        document.getElementById('sheetCameraLabel').classList.remove('has-photo');
+        return;
+      }
+      strip.style.display = 'flex';
+      document.getElementById('sheetCameraLabel').classList.add('has-photo');
+
+      stagedPhotos.forEach((b64, idx) => {
+        const wrap = document.createElement('div');
+        wrap.className = 'staged-photo-wrap';
+        wrap.innerHTML = `
+          <img src="${b64}">
+          <div class="staged-photo-remove" onclick="removeStagedPhoto(${idx})">✕</div>
+        `;
+        strip.appendChild(wrap);
+      });
+    }
+
+    function removeStagedPhoto(idx) {
+      stagedPhotos.splice(idx, 1);
+      renderStagedPhotos();
+    }
+
+    async function saveNewTransaction(e) {
+      e.preventDefault();
+      const title = document.getElementById('newTxTitle').value.trim();
+      if (!title) return;
+
+      haptic();
+      const date = document.getElementById('newTxDate').value || getTodayString();
+      const amt = parseAmount(document.getElementById('newTxAmount').value);
+      const id = 'tx_' + Date.now() + '_' + Math.random().toString(36).substr(2, 4);
+
+      // Save each staged photo to IndexedDB
+      const savedPhotoIds = [];
+      for (let i = 0; i < stagedPhotos.length; i++) {
+        const pId = `img_${id}_${i}`;
+        await savePhotoBlob(pId, stagedPhotos[i]);
+        savedPhotoIds.push(pId);
+      }
+
+      tasks.unshift({
+        id,
+        text: title,
+        done: false,
+        amount: amt,
+        tag: chosenTag,
+        itemDate: date,
+        photoIds: savedPhotoIds,
+        createdAt: Date.now(),
+        updatedAt: Date.now()
+      });
+
+      document.getElementById('newTxTitle').value = '';
+      document.getElementById('newTxAmount').value = '';
+      stagedPhotos = [];
+      renderStagedPhotos();
+      closeExpenseSheet();
+      saveAndRender();
+    }
+
+    // Voice dictation
+    let voiceRecognizer = null;
+    let isListening = false;
+    function toggleVoiceDictation() {
+      const Speech = window.SpeechRecognition || window.webkitSpeechRecognition;
+      if (!Speech) {
+        alert("Speech recognition is not supported on this browser.");
+        return;
+      }
+      const btn = document.getElementById('voiceMicBtn');
+      if (!voiceRecognizer) {
+        voiceRecognizer = new Speech();
+        voiceRecognizer.lang = 'en-IN';
+        voiceRecognizer.onresult = (ev) => {
+          const transcript = ev.results[0][0].transcript;
+          haptic();
+          let txt = transcript;
+          let num = 0;
+          const match = txt.match(/(\d+(?:\.\d+)?|\d+k)/i);
+          if (match) {
+            num = parseAmount(match[1]);
+            txt = txt.replace(match[0], '').replace(/(spent|on|for|rupees|rs|inr)/gi, '').trim();
+          }
+          document.getElementById('newTxTitle').value = txt || 'Voice Expense';
+          if (num) document.getElementById('newTxAmount').value = num;
+        };
+        voiceRecognizer.onend = () => {
+          isListening = false;
+          btn.style.color = '';
+        };
+      }
+
+      if (!isListening) {
+        voiceRecognizer.start();
+        isListening = true;
+        btn.style.color = 'var(--red)';
+        haptic();
+      } else {
+        voiceRecognizer.stop();
+        isListening = false;
+        btn.style.color = '';
+      }
+    }
+
+    // SMS Parser
+    function quickParseSms() {
+      haptic();
+      const raw = prompt("Paste bank/UPI debit SMS here:");
+      if (!raw) return;
+
+      const amtMatch = raw.match(/(?:rs\.?|inr|₹)\s*([\d,]+(?:\.\d{2})?)/i) || raw.match(/debited by\s*([\d,]+)/i);
+      const vdrMatch = raw.match(/(?:to|at|vpa)\s+([A-Za-z0-9\s._]+?)(?:\s+on|\s+ref|\s+upi|\.|\n|$)/i);
+
+      openExpenseSheet();
+      if (amtMatch) document.getElementById('newTxAmount').value = amtMatch[1].replace(/,/g, '');
+      if (vdrMatch) document.getElementById('newTxTitle').value = vdrMatch[1].trim();
+    }
+
+    function toggleSettingsDrawer(open) {
+      haptic();
+      document.getElementById('settingsDrawer').classList.toggle('active', open);
+    }
+
+    // --- 8. FEED & CRUD ---
+    function toggleTaskDone(id) {
+      haptic();
+      const item = tasks.find(t => t.id === id);
+      if (item) {
+        item.done = !item.done;
+        item.updatedAt = Date.now();
+        saveAndRender();
+      }
+    }
+
+    function inlineEditAmount(id, val) {
+      const item = tasks.find(t => t.id === id);
+      if (item) {
+        item.amount = parseAmount(val);
+        item.updatedAt = Date.now();
+        saveAndRender();
+      }
+    }
+
+    async function removeTask(id) {
+      haptic();
+      const item = tasks.find(t => t.id === id);
+      if (item && item.photoIds) {
+        for (const pId of item.photoIds) {
+          await deletePhotoBlob(pId);
+        }
+      }
+      tasks = tasks.filter(t => t.id !== id);
+      saveAndRender();
+    }
+
+    function setSegmentFilter(s) {
+      haptic();
+      activeFilter = s;
+      document.getElementById('segAll').classList.toggle('active', s === 'all');
+      document.getElementById('segActive').classList.toggle('active', s === 'active');
+      document.getElementById('segDone').classList.toggle('active', s === 'done');
+      renderLedgerFeed();
+    }
+
+    function onSearchChange(q) {
+      searchQuery = q.trim().toLowerCase();
+      renderLedgerFeed();
+    }
+
+    function editMonthlyBudget() {
+      const val = prompt("Set monthly budget limit in ₹:", budgetLimit);
+      if (val && !isNaN(parseAmount(val))) {
+        budgetLimit = parseAmount(val);
+        localStorage.setItem('pkt_budget', budgetLimit);
+        renderLedgerFeed();
+      }
+    }
+
+    function saveAndRender() {
+      localStorage.setItem('pkt_tasks', JSON.stringify(tasks));
+      renderLedgerFeed();
+    }
+
+    async function renderLedgerFeed() {
+      const feed = document.getElementById('ledgerFeed');
+      feed.innerHTML = '';
+      const today = getTodayString();
+      const currentMonth = today.slice(0, 7);
+
+      const filtered = tasks.filter(t => {
+        if (activeFilter === 'active' && t.done) return false;
+        if (activeFilter === 'done' && !t.done) return false;
+        if (searchQuery) {
+          const matchTitle = t.text.toLowerCase().includes(searchQuery);
+          const matchTag = (t.tag || '').toLowerCase().includes(searchQuery.replace('#', ''));
+          if (!matchTitle && !matchTag) return false;
+        }
+        return true;
+      });
+
+      let todayTotal = 0;
+      let monthTotal = 0;
+      tasks.forEach(t => {
+        const amt = parseFloat(t.amount) || 0;
+        if (t.itemDate === today) todayTotal += amt;
+        if ((t.itemDate || '').startsWith(currentMonth)) monthTotal += amt;
+      });
+
+      document.getElementById('heroTodayTotal').textContent = `Today: ₹${todayTotal.toLocaleString('en-IN')}`;
+      document.getElementById('heroMonthTotal').textContent = monthTotal.toLocaleString('en-IN');
+      document.getElementById('heroLimitBtn').textContent = `Limit: ₹${budgetLimit.toLocaleString('en-IN')} ✎`;
+
+      const remaining = Math.max(budgetLimit - monthTotal, 0);
+      document.getElementById('heroRemainingTotal').textContent = `Safe to spend: ₹${remaining.toLocaleString('en-IN')}`;
+
+      const pct = Math.min(Math.round((monthTotal / budgetLimit) * 100), 100);
+      const bar = document.getElementById('heroProgressBar');
+      bar.style.width = pct + '%';
+      bar.style.background = pct > 90 ? 'var(--red)' : (pct > 75 ? '#f59e0b' : 'var(--green)');
+
+      if (filtered.length === 0) {
+        feed.innerHTML = `
+          <div style="display:flex; flex-direction:column; align-items:center; justify-content:center; margin-top:60px; color:var(--text-muted); gap:8px;">
+            <div style="font-size:2rem; opacity:0.35;">🧾</div>
+            <div style="font-size:0.88rem; font-weight:600;">No transactions found</div>
+            <div style="font-size:0.75rem; opacity:0.7;">Tap + to add your first expense</div>
+          </div>
+        `;
+        return;
+      }
+
+      // Group by date
+      filtered.sort((a, b) => (b.itemDate || '').localeCompare(a.itemDate || '') || (b.createdAt - a.createdAt));
+
+      const clusters = {};
+      filtered.forEach(t => {
+        const d = t.itemDate || 'No Date';
+        if (!clusters[d]) clusters[d] = { items: [], sum: 0 };
+        clusters[d].items.push(t);
+        clusters[d].sum += (parseFloat(t.amount) || 0);
+      });
+
+      for (const dKey of Object.keys(clusters)) {
+        const cluster = clusters[dKey];
+        const daySection = document.createElement('div');
+        daySection.className = 'day-section';
+
+        daySection.innerHTML = `
+          <div class="day-header">
+            <span>${formatDisplayDate(dKey)}</span>
+            <span class="day-total">₹${cluster.sum.toLocaleString('en-IN')}</span>
+          </div>
+        `;
+
+        const cardsWrap = document.createElement('div');
+        cardsWrap.className = 'transaction-cards';
+
+        for (const t of cluster.items) {
+          const itemCard = document.createElement('div');
+          itemCard.className = `card-item ${t.done ? 'done' : ''}`;
+
+          // Multi-image thumbnail rendering
+          let thumbsHtml = '';
+          const pList = Array.isArray(t.photoIds) ? t.photoIds : (t.photoId ? [t.photoId] : []);
+          if (pList.length > 0) {
+            const firstImg = await getPhotoBlob(pList[0]);
+            if (firstImg) {
+              const badge = pList.length > 1 ? `<span class="thumb-badge">+${pList.length - 1}</span>` : '';
+              thumbsHtml = `
+                <div class="thumbs-strip" onclick="openMultiLightbox(${JSON.stringify(pList).replace(/"/g, '&quot;')})">
+                  <img src="${firstImg}" class="card-thumb" alt="Receipt">
+                  ${badge}
+                </div>
+              `;
+            }
+          }
+
+          itemCard.innerHTML = `
+            <div class="card-check" onclick="toggleTaskDone('${t.id}')"></div>
+            ${thumbsHtml}
+            <div class="card-body">
+              <span class="card-title">${escapeHTML(t.text)}</span>
+              <div class="card-tags">
+                ${t.tag ? `<span class="tag-badge">#${escapeHTML(t.tag)}</span>` : ''}
+                <span>${formatTime(t.createdAt)}</span>
+              </div>
+            </div>
+            <div class="card-amount-box">
+              <span>₹</span>
+              <input type="text" value="${t.amount || ''}" placeholder="0" onchange="inlineEditAmount('${t.id}', this.value)" onfocus="this.select()">
+            </div>
+            <button class="card-del" onclick="removeTask('${t.id}')">✕</button>
+          `;
+          cardsWrap.appendChild(itemCard);
+        }
+
+        daySection.appendChild(cardsWrap);
+        feed.appendChild(daySection);
+      }
+    }
+
+    // Multi-Image Lightbox
+    async function openMultiLightbox(pList) {
+      haptic();
+      if (!pList || !pList.length) return;
+      // Show first photo, and if multiple, click to cycle through
+      let curIdx = 0;
+      const imgElem = document.getElementById('lightboxTargetImg');
+      const loadImg = async (idx) => {
+        const b64 = await getPhotoBlob(pList[idx]);
+        if (b64) imgElem.src = b64;
+      };
+      await loadImg(0);
+      document.getElementById('lightboxScreen').classList.add('active');
+
+      imgElem.onclick = async (e) => {
+        e.stopPropagation();
+        if (pList.length > 1) {
+          curIdx = (curIdx + 1) % pList.length;
+          await loadImg(curIdx);
+          haptic();
+        } else {
+          dismissLightbox();
+        }
+      };
+    }
+
+    function dismissLightbox() {
+      document.getElementById('lightboxScreen').classList.remove('active');
+      document.getElementById('lightboxTargetImg').src = '';
+    }
+
+    // --- 9. RECURRING SUBSCRIPTIONS ---
+    let recurringBills = JSON.parse(localStorage.getItem('pkt_recurring') || '[]');
+
+    function addRecurringPrompt() {
+      const name = prompt("Subscription / Bill name (e.g. Wi-Fi, Rent):");
+      if (!name) return;
+      const amt = prompt("Monthly amount in ₹:");
+      if (!amt || isNaN(parseAmount(amt))) return;
+
+      haptic();
+      recurringBills.push({ id: 'rec_' + Date.now(), name, amount: parseAmount(amt) });
+      localStorage.setItem('pkt_recurring', JSON.stringify(recurringBills));
+      renderRecurringList();
+    }
+
+    function renderRecurringList() {
+      const c = document.getElementById('recurringFeed');
+      c.innerHTML = '';
+      if (recurringBills.length === 0) {
+        c.innerHTML = '<div style="color:var(--text-muted); text-align:center; font-size:0.82rem; margin-top:24px;">No recurring subscriptions saved.</div>';
+        return;
+      }
+      recurringBills.forEach((b, i) => {
+        const el = document.createElement('div');
+        el.className = 'rec-item';
+        el.innerHTML = `
+          <div>
+            <div style="font-weight:600; font-size:0.9rem;">${escapeHTML(b.name)}</div>
+            <div style="font-size:0.72rem; color:var(--text-muted);">Posts on 1st of every month</div>
+          </div>
+          <div style="display:flex; align-items:center; gap:8px;">
+            <strong style="color:var(--green);">₹${b.amount.toLocaleString('en-IN')}</strong>
+            <button class="btn-circle" onclick="removeRecurringItem(${i})" style="color:var(--red); border:none; width:30px; height:30px;">✕</button>
+          </div>
+        `;
+        c.appendChild(el);
+      });
+    }
+
+    function removeRecurringItem(i) {
+      haptic();
+      recurringBills.splice(i, 1);
+      localStorage.setItem('pkt_recurring', JSON.stringify(recurringBills));
+      renderRecurringList();
+    }
+
+    function autoPostRecurring() {
+      const today = getTodayString();
+      const currentMonth = today.slice(0, 7);
+      const lastPosted = localStorage.getItem('pkt_rec_last_posted');
+
+      if (lastPosted !== currentMonth && recurringBills.length > 0) {
+        recurringBills.forEach(b => {
+          tasks.unshift({
+            id: 'tx_rec_' + Date.now() + '_' + Math.random().toString(36).substr(2, 4),
+            text: b.name + ' (Recurring)',
+            done: false,
+            amount: b.amount,
+            tag: 'bills',
+            itemDate: today,
+            photoIds: [],
+            createdAt: Date.now(),
+            updatedAt: Date.now()
+          });
+        });
+        localStorage.setItem('pkt_rec_last_posted', currentMonth);
+        saveAndRender();
+      }
+    }
+
+    // --- 10. AI ANALYST & EDGE GALLERY ---
+    function buildMonthlySummaryPayload() {
+      const today = getTodayString();
+      const currentMonth = today.slice(0, 7);
+      const monthTasks = tasks.filter(t => (t.itemDate || '').startsWith(currentMonth));
+      let total = 0;
+      const lines = [];
+
+      monthTasks.forEach(t => {
+        const a = parseFloat(t.amount) || 0;
+        total += a;
+        lines.push(`- ${t.itemDate}: ${t.text} | ₹${a} [#${t.tag || 'none'}]`);
+      });
+
+      return {
+        month: currentMonth,
+        count: monthTasks.length,
+        total,
+        prompt: `You are an on-device personal financial assistant running privately on my phone.
+Here is my ledger for month: ${currentMonth}.
+Monthly Target Budget: ₹${budgetLimit}
+Total spent: ₹${total.toLocaleString('en-IN')} (${monthTasks.length} entries)
+
+TRANSACTIONS:
+${lines.length ? lines.join('\n') : 'No items recorded.'}
+
+Analyze:
+1. Top cost drivers & category distribution.
+2. Daily burn rate and runway status against the budget limit.
+3. 2 actionable money-saving adjustments.`
+      };
+    }
+
+    function copyEdgePayload() {
+      haptic();
+      const p = buildMonthlySummaryPayload().prompt;
+      navigator.clipboard.writeText(p).then(() => {
+        alert("Copied monthly ledger payload! Open Google AI Edge Gallery on your phone and paste it directly into Gemma Chat or Prompt Lab.");
+      });
+    }
+
+    function clearAiChat() {
+      haptic();
+      document.getElementById('aiChatFeed').innerHTML = '<div class="bubble bot">Chat cleared. Ready for your next query.</div>';
+    }
+
+    function aiQuickAsk(type) {
+      haptic();
+      const data = buildMonthlySummaryPayload();
+      if (type === 'month') {
+        appendChat('user', '📊 Month Breakdown');
+        appendChat('bot', `This month you have logged <strong>${data.count}</strong> transactions totaling <strong>₹${data.total.toLocaleString('en-IN')}</strong> of your ₹${budgetLimit.toLocaleString('en-IN')} budget.`);
+      } else if (type === 'top') {
+        appendChat('user', '💸 Top Spends');
+        const sorted = [...tasks.filter(t => (t.itemDate || '').startsWith(data.month))].sort((a,b)=>(b.amount||0)-(a.amount||0)).slice(0, 3);
+        const out = 'Top Spends:<br>' + sorted.map(t => `• ${escapeHTML(t.text)}: ₹${t.amount}`).join('<br>');
+        appendChat('bot', out);
+      } else if (type === 'velocity') {
+        appendChat('user', '📈 Daily Burn Rate');
+        const day = new Date().getDate();
+        const avg = Math.round(data.total / Math.max(day, 1));
+        appendChat('bot', `Average spending velocity is approximately <strong>₹${avg.toLocaleString('en-IN')}/day</strong>.`);
+      }
+    }
+
+    function handleAiChat(e) {
+      e.preventDefault();
+      const inp = document.getElementById('aiUserInput');
+      const q = inp.value.trim();
+      if (!q) return;
+
+      haptic();
+      appendChat('user', escapeHTML(q));
+      inp.value = '';
+
+      const data = buildMonthlySummaryPayload();
+      setTimeout(() => {
+        let resp = `<strong>📊 Month Analysis (${data.month}):</strong><br><br>`;
+        resp += `• <strong>Total Spent:</strong> ₹${data.total.toLocaleString('en-IN')} across ${data.count} items.<br>`;
+        resp += `• <strong>Budget Status:</strong> ${data.total > budgetLimit ? '⚠️ Over budget!' : '✅ Within limit of ₹' + budgetLimit.toLocaleString('en-IN')}<br><br>`;
+        resp += `<em>💡 Pro-tip:</em> Tap <strong>"Copy for Edge Gallery"</strong> above to run this through Gemma on your phone's NPU!`;
+        appendChat('bot', resp);
+      }, 300);
+    }
+
+    function appendChat(sender, text) {
+      const box = document.getElementById('aiChatFeed');
+      const div = document.createElement('div');
+      div.className = `bubble ${sender}`;
+      div.innerHTML = text;
+      box.appendChild(div);
+      box.scrollTop = box.scrollHeight;
+    }
+
+    // --- 11. EXPORTS & BACKUPS ---
+    function exportSpreadsheetCSV() {
+      haptic();
+      let csv = "data:text/csv;charset=utf-8,ID,Date,Item,Amount,Tag,Status\n";
+      tasks.forEach(t => {
+        csv += `${t.id},${t.itemDate},"${(t.text||'').replace(/"/g, '""')}",${t.amount||0},${t.tag||''},${t.done?'Done':'Pending'}\n`;
+      });
+      const uri = encodeURI(csv);
+      const a = document.createElement('a');
+      a.href = uri;
+      a.download = `pocket_ledger_${getTodayString()}.csv`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+    }
+
+    async function exportFullJsonBackup() {
+      haptic();
+      const bundle = {
+        version: 9,
+        budget: budgetLimit,
+        recurring: recurringBills,
+        tasks: tasks,
+        photos: {}
+      };
+      for (const t of tasks) {
+        const pList = Array.isArray(t.photoIds) ? t.photoIds : (t.photoId ? [t.photoId] : []);
+        for (const pId of pList) {
+          const b64 = await getPhotoBlob(pId);
+          if (b64) bundle.photos[pId] = b64;
+        }
+      }
+      const blob = new Blob([JSON.stringify(bundle, null, 2)], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `pocket_ledger_backup_${getTodayString()}.json`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+    }
+
+    async function importFullJsonBackup(ev) {
+      const file = ev.target.files[0];
+      if (!file) return;
+      const reader = new FileReader();
+      reader.onload = async (e) => {
+        try {
+          const bundle = JSON.parse(e.target.result);
+          if (bundle.tasks && Array.isArray(bundle.tasks)) {
+            tasks = bundle.tasks.map(t => ({
+              ...t,
+              photoIds: Array.isArray(t.photoIds) ? t.photoIds : (t.photoId ? [t.photoId] : [])
+            }));
+            if (bundle.budget) budgetLimit = bundle.budget;
+            if (bundle.recurring) recurringBills = bundle.recurring;
+            if (bundle.photos) {
+              for (const [k, v] of Object.entries(bundle.photos)) {
+                await savePhotoBlob(k, v);
+              }
+            }
+            saveAndRender();
+            toggleSettingsDrawer(false);
+            alert("Pocket Ledger backup restored successfully!");
+          } else {
+            alert("Invalid backup file.");
+          }
+        } catch (err) {
+          alert("Error reading file.");
+        }
+      };
+      reader.readAsText(file);
+    }
+
+    // --- 12. QUICK NOTES ---
+    const notesEditor = document.getElementById('notesEditor');
+    notesEditor.value = localStorage.getItem('pkt_notes') || '';
+    notesEditor.addEventListener('input', () => {
+      localStorage.setItem('pkt_notes', notesEditor.value);
+    });
+
+    // --- INITIALIZE ---
+    initDb().then(() => {
+      autoPostRecurring();
+      renderLedgerFeed();
+    });
+  </script>
+</body>
+</html>
