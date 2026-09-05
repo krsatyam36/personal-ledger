@@ -1142,6 +1142,26 @@
           <button class="ai-pill" onclick="copyEdgePayload()">📋 Copy for Edge Gallery</button>
           <button class="ai-pill" onclick="clearAiChat()">🧹 Clear</button>
         </div>
+        <!-- Feature: Local LLM Model Selection & Chat -->
+        <div class="ai-model-selector" id="aiModelSelector" style="padding:12px 14px; background:var(--surface); border:1px solid var(--border); border-radius:14px; margin:12px 0;">
+          <span style="font-size:0.78rem; color:var(--text-muted); font-weight:600;">Local Model</span>
+          <select id="modelSelector" onchange="updateModelPreview()" style="flex:1; margin-left:8px; padding:6px 10px; background:var(--surface-elevated); border:1px solid var(--border); border-radius:10px; color:var(--text); font-size:0.8rem;">
+            <option value="">-- Select Ollama Model --</option>
+            <option value="gemma3:4b">gemma3:4b (3.3 GB)</option>
+            <option value="gemma4:12b">gemma4:12b (7.6 GB)</option>
+            <option value="nemotron-3-nano:4b">nemotron-3-nano:4b (2.8 GB)</option>
+            <option value="deepseek-r1:7b">deepseek-r1:7b (4.7 GB)</option>
+            <option value="llama3.2:latest">llama3.2:latest (2.0 GB)</option>
+            <option value="qwen2.5:7b">qwen2.5:7b (4.7 GB)</option>
+          </select>
+          <button class="btn-circle" onclick="startLlmChat()" style="margin-left:8px; width:32px; height:32px; justify-content:center;">⏺</button>
+          <span id="modelStatus" style="margin-left:8px; font-size:0.72rem; color:var(--text-muted);">Stopped</span>
+        </div>
+
+        <div class="ai-model-preview" id="modelPreview" style="padding:12px 14px; background:var(--surface-elevated); border:1px solid var(--border); border-radius:14px; margin:12px 0; display:none;">
+          <span style="font-size:0.78rem; color:var(--text-muted);">Model will start shortly...</span>
+        </div>
+
         <!-- Feature 1: Dynamic #Hashtag Deep Dive Pills -->
         <div class="ai-tags-bar" id="aiTagsBar"></div>
 
@@ -1160,15 +1180,18 @@
         </div>
 
         <div class="ai-messages" id="aiChatFeed">
-          <div class="bubble bot">
+          <div class="bubble bot" id="chatWelcome">
             👋 <strong>Private On-Device AI Financial Analyst</strong><br>
-            I calculate your daily burn rates, detect outlier expenses, and prepare offline data payloads for Google AI Edge Gallery / Gemma models. Ask a question or tap a pill above!
+            Select a local Ollama model above to start chatting. Your data stays on your device.
           </div>
         </div>
-        <form class="ai-bar" onsubmit="handleAiChat(event)">
-          <input type="text" id="aiUserInput" placeholder="Ask about this month's budget..." autocomplete="off">
+
+        <form class="ai-bar" onsubmit="handleLlmChat(event)" id="llmChatForm">
+          <input type="text" id="aiUserInput" placeholder="Ask about this month's budget... or ask the model about any transaction" autocomplete="off">
           <button type="submit" class="btn-circle" style="background:var(--accent); color:white; border:none;">➤</button>
         </form>
+
+        <button class="btn-circle" onclick="endLlmChat()" style="position:fixed; bottom:140px; right:20px; width:36px; height:36px; background:rgba(245,158,11,0.2); border:1px solid rgba(245,158,11,0.4); color:#fbbf24; font-size:1rem; display:none; align-items:center; justify-content:center; z-index:50;">⏹</button>
       </div>
     </section>
 
@@ -2596,8 +2619,220 @@ Analyze:
       localStorage.setItem('pkt_notes', notesEditor.value);
     });
 
-    // --- INITIALIZE ---
-    async function initializeApp() {
+    // --- 13. LOCAL LLM CHAT (Ollama Integration) ---
+    // Chat history stored in localStorage: { chats: [{id, title, model, createdAt, messages: [{role, content}]}] }
+    const CHAT_HISTORY_KEY = 'pkt_llm_chats';
+    let currentChatId = null;
+    let currentModel = '';
+
+    function loadChatHistory() {
+      try {
+        const data = localStorage.getItem(CHAT_HISTORY_KEY);
+        return data ? JSON.parse(data) : { chats: [] };
+      } catch (e) {
+        console.warn('Could not load LLM chat history:', e);
+        return { chats: [] };
+      }
+    }
+
+    function saveChatHistory(data) {
+      try {
+        localStorage.setItem(CHAT_HISTORY_KEY, JSON.stringify(data));
+      } catch (e) {
+        console.warn('Could not save LLM chat history:', e);
+      }
+    }
+
+    function generateChatTitle(modelName) {
+      const now = new Date();
+      return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')} - ${modelName}`;
+    }
+
+    function newChatSession(model) {
+      const history = loadChatHistory();
+      const chatId = 'chat_' + Date.now();
+      const title = generateChatTitle(model);
+      const newChat = {
+        id: chatId,
+        title: title,
+        model: model,
+        createdAt: Date.now(),
+        messages: []
+      };
+      // Keep only last 50 chats to avoid localStorage bloat
+      const updated = { chats: [newChat, ...history.chats.filter(c => c.id !== newChat.id).slice(0, 49)] };
+      saveChatHistory(updated);
+      return newChat;
+    }
+
+    function getActiveChat() {
+      const history = loadChatHistory();
+      if (currentChatId) {
+        const chat = history.chats.find(c => c.id === currentChatId);
+        if (chat) return chat;
+      }
+      // Return the most recent chat if no current one active
+      if (history.chats && history.chats.length > 0) return history.chats[0];
+      return null;
+    }
+
+    function appendChatMessage(chat, role, content) {
+      const msg = { role, content };
+      chat.messages.push(msg);
+      saveChatHistory(loadChatHistory()); // save after push
+      return msg;
+    }
+
+    function renderChatHistoryUI() {
+      // Could be used to show a sidebar of past chats
+      // For now, just ensure new chat starts fresh
+    }
+
+    async function startLlmChat() {
+      const selector = document.getElementById('modelSelector');
+      const model = selector.value;
+      if (!model) {
+        alert('Please select a model first.');
+        return;
+      }
+
+      currentModel = model;
+      currentChatId = 'chat_' + Date.now();
+      const chat = newChatSession(model);
+
+      // Update UI
+      const modelStatus = document.getElementById('modelStatus');
+      const modelPreview = document.getElementById('modelPreview');
+      const chatWelcome = document.getElementById('chatWelcome');
+      const llmChatForm = document.getElementById('llmChatForm');
+      const modelSelectorElem = document.getElementById('modelSelector');
+
+      modelStatus.textContent = 'Running ' + model;
+      modelStatus.style.color = 'var(--accent)';
+      modelPreview.style.display = 'none';
+      modelSelectorElem.style.display = 'none';
+      chatWelcome.style.display = 'none';
+
+      // Show end chat button
+      const endBtn = document.querySelector('button.btn-circle[onclick="endLlmChat()"]');
+      if (endBtn) endBtn.style.display = 'flex';
+
+      // Auto-focus input
+      const input = document.getElementById('aiUserInput');
+      if (input) input.focus();
+
+      // Send initial system prompt to set context
+      const systemMsg = `You are a helpful financial assistant for a personal ledger app. The user has access to their transaction data. Keep responses concise and helpful.`;
+      await sendToOllama(systemMsg, chat);
+
+      // Append bot intro
+      appendChatMessage(chat, 'bot', `🤖 Model <strong>${model}</strong> ready. I'm your private on-device AI financial analyst. Ask me about your transactions, categories, budget, or anything financial!`);
+    }
+
+    async function endLlmChat() {
+      const selector = document.getElementById('modelSelector');
+      const modelStatus = document.getElementById('modelStatus');
+      const modelPreview = document.getElementById('modelPreview');
+      const chatWelcome = document.getElementById('chatWelcome');
+      const llmChatForm = document.getElementById('llmChatForm');
+      const modelSelectorElem = document.getElementById('modelSelector');
+      const endBtn = document.querySelector('button.btn-circle[onclick="endLlmChat()"]');
+
+      modelStatus.textContent = 'Stopped';
+      modelStatus.style.color = 'var(--text-muted)';
+      modelPreview.style.display = 'none';
+      modelSelectorElem.style.display = 'inline-block';
+      chatWelcome.style.display = 'block';
+
+      if (endBtn) endBtn.style.display = 'none';
+
+      // Reset current chat
+      currentChatId = null;
+      currentModel = '';
+    }
+
+    async function sendToOllama(message, chat) {
+      try {
+        const res = await fetch('http://localhost:11434/api/chat', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            model: currentModel,
+            messages: [
+              ...chat.messages.map(m => ({ role: m.role, content: m.content })).reverse(), // most recent first
+              { role: 'user', content: message }
+            ],
+            stream: false
+          })
+        });
+
+        if (!res.ok) {
+          const errTxt = await res.text();
+          throw new Error(`Ollama API error: ${res.status} - ${errTxt}`);
+        }
+
+        const data = await res.json();
+        return data.message?.content || 'No response from model';
+      } catch (err) {
+        console.error('Error communicating with Ollama:', err);
+        return `❌ Could not connect to Ollama. Is it running? (${err.message})`;
+      }
+    }
+
+    async function handleLlmChat(e) {
+      e.preventDefault();
+      const inp = document.getElementById('aiUserInput');
+      const q = inp.value.trim();
+      if (!q) return;
+
+      haptic();
+      appendChatMessage(getActiveChat(), 'user', escapeHTML(q));
+      inp.value = '';
+
+      const chat = getActiveChat();
+      if (!chat) {
+        appendChatMessage({} , 'bot', '⚠️ No active chat session. Click "Start Chat" first.');
+        return;
+      }
+
+      // Show thinking state
+      const botMsg = appendChatMessage(chat, 'bot', '🤔 Thinking...');
+      const bubble = botMsg; // will update content
+
+      // Send to Ollama
+      const response = await sendToOllama(q, chat);
+
+      // Update the thinking message with actual response
+      bubble.innerHTML = response;
+      bubble.className = 'bubble user'; // user bubble for model response? Actually model is assistant
+      // Fix: model responses should have bot class
+      bubble.className = 'bubble bot';
+
+      // Scroll to bottom
+      const box = document.getElementById('aiChatFeed');
+      box.scrollTop = box.scrollHeight;
+    }
+
+    function updateModelPreview() {
+      const select = document.getElementById('modelSelector');
+      const preview = document.getElementById('modelPreview');
+      const val = select.value;
+      if (val) {
+        preview.innerHTML = `<span style="font-size:0.78rem; color:var(--accent);">Selected: ${val}</span>`;
+        preview.style.display = 'block';
+      } else {
+        preview.style.display = 'none';
+      }
+    }
+
+    // Initialize: load any existing chat history on app start (quietly)
+    (function() {
+      const history = loadChatHistory();
+      if (history && history.chats && history.chats.length > 0) {
+        // Could auto-resume last chat; for now just log
+        console.log('LLM Chat history:', history.chats.length, 'saved sessions');
+      }
+    })();
       await initDb();
 
       // Load meta (budget, recurring) from API if available
