@@ -8,9 +8,61 @@ const app = express();
 const PORT = process.env.PORT || 8080;
 const MONGO_URI = process.env.MONGO_URI || 'mongodb://mongo:27017/personal_ledger';
 
-app.use(cors());
+// --- SECURITY HARDENING & DEFENSE IN DEPTH ---
+// 1. Strict CORS policy: Allow only local web frontend
+const allowedOrigins = [
+  'http://localhost:8080',
+  'http://127.0.0.1:8080',
+  'http://localhost:3000',
+  'http://127.0.0.1:3000'
+];
+app.use(cors({
+  origin: (origin, callback) => {
+    // Allow non-browser agents (like curl, background daemons) and local origins
+    if (!origin || allowedOrigins.includes(origin)) {
+      return callback(null, true);
+    }
+    return callback(new Error('Blocked by CORS policy: Unauthorized origin.'));
+  },
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With']
+}));
+
+// 2. Security Headers (Anti-Clickjacking, MIME-Sniffing, XSS protection)
+app.use((req, res, next) => {
+  res.setHeader('X-Content-Type-Options', 'nosniff');
+  res.setHeader('X-Frame-Options', 'DENY');
+  res.setHeader('X-XSS-Protection', '1; mode=block');
+  res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
+  res.setHeader('Content-Security-Policy', "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self' http://localhost:11434 http://127.0.0.1:11434;");
+  next();
+});
+
+// 3. NoSQL Injection Guard: strip dangerous keys like $where, $ne, $gt, etc.
+function sanitizeObject(obj) {
+  if (!obj || typeof obj !== 'object') return obj;
+  for (const key of Object.keys(obj)) {
+    if (key.startsWith('$') || key.includes('.')) {
+      delete obj[key];
+    } else if (typeof obj[key] === 'object') {
+      sanitizeObject(obj[key]);
+    }
+  }
+  return obj;
+}
+
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ extended: true, limit: '50mb' }));
+
+app.use((req, res, next) => {
+  if (req.body && typeof req.body === 'object') {
+    sanitizeObject(req.body);
+  }
+  if (req.query && typeof req.query === 'object') {
+    sanitizeObject(req.query);
+  }
+  next();
+});
 
 // --- Mongoose Schemas & Models ---
 // Strict: false allows optional fields like isLent, borrowerName, settled without altering existing documents
@@ -344,8 +396,22 @@ async function seedDatabaseIfEmpty() {
   }
 }
 
-// --- FEATURE 3: Automated Daily DB Snapshots (JSON Backup Daemon) ---
-async function runDailyBackupSnapshot() {
+// --- FEATURE 3: Automated 6-Hour DB Snapshots (JSON Backup Daemon) ---
+function getSnapshotTimestampStrings(date = new Date()) {
+  const pad = (n) => String(n).padStart(2, '0');
+  const hours = pad(date.getHours());
+  const minutes = pad(date.getMinutes());
+  const seconds = pad(date.getSeconds());
+  const year = date.getFullYear();
+  const month = pad(date.getMonth() + 1);
+  const day = pad(date.getDate());
+
+  const timeStr = `${hours}-${minutes}-${seconds}`;
+  const dateStr = `${year}-${month}-${day}`;
+  return { timeStr, dateStr };
+}
+
+async function runBackupSnapshot() {
   try {
     const backupDir = path.resolve(__dirname, '../backup-jsons');
     const altBackupDir = path.resolve(__dirname, 'backup-jsons');
@@ -355,11 +421,12 @@ async function runDailyBackupSnapshot() {
       try { fs.mkdirSync(targetDir, { recursive: true }); } catch (e) {}
     }
 
-    const todayStr = new Date().toISOString().split('T')[0];
-    const targetFileName = `pocket_ledger_backup_${todayStr}.json`;
+    const { timeStr, dateStr } = getSnapshotTimestampStrings();
+    // Naming convention requested: time-date-backup.json (e.g. 16-52-00-2026-09-05-backup.json)
+    const targetFileName = `${timeStr}-${dateStr}-backup.json`;
     const targetFilePath = path.join(targetDir, targetFileName);
 
-    // Fetch collections
+    // Fetch complete collections with all base64 photo data
     const [tasks, photosList, metaList] = await Promise.all([
       Task.find({}).lean(),
       Photo.find({}).lean(),
@@ -385,17 +452,18 @@ async function runDailyBackupSnapshot() {
       recurring,
       tasks,
       photos: photosObj,
-      snapshotTimestamp: Date.now()
+      snapshotTimestamp: Date.now(),
+      generatedAt: new Date().toISOString()
     };
 
     fs.writeFileSync(targetFilePath, JSON.stringify(snapshot, null, 2), 'utf8');
-    console.log(`[BackupDaemon] Saved daily snapshot: ${targetFilePath} (${tasks.length} tasks, ${photosList.length} photos)`);
+    console.log(`[BackupDaemon] Saved 6-hour snapshot: ${targetFilePath} (${tasks.length} tasks, ${photosList.length} photos)`);
 
-    // Retention policy: Keep only the last 7 daily backup files
+    // Retention policy: Keep the last 28 snapshots (7 full days @ 4 snapshots/day)
     try {
       const files = fs.readdirSync(targetDir);
       const backupFiles = files
-        .filter(f => f.startsWith('pocket_ledger_backup_') && f.endsWith('.json'))
+        .filter(f => (f.endsWith('-backup.json') || f.startsWith('pocket_ledger_backup_')) && f.endsWith('.json'))
         .map(f => ({
           name: f,
           path: path.join(targetDir, f),
@@ -403,8 +471,8 @@ async function runDailyBackupSnapshot() {
         }))
         .sort((a, b) => b.time - a.time);
 
-      if (backupFiles.length > 7) {
-        const toDelete = backupFiles.slice(7);
+      if (backupFiles.length > 28) {
+        const toDelete = backupFiles.slice(28);
         for (const item of toDelete) {
           try {
             fs.unlinkSync(item.path);
@@ -422,13 +490,15 @@ async function runDailyBackupSnapshot() {
   }
 }
 
-function initDailyBackupDaemon() {
-  // Run on startup
-  runDailyBackupSnapshot();
-  // Schedule every 24 hours (86,400,000 ms)
+function initSixHourBackupDaemon() {
+  // 1. Run immediately starting right now
+  runBackupSnapshot();
+
+  // 2. Schedule every 6 hours (6 * 60 * 60 * 1000 = 21,600,000 ms)
+  const SIX_HOURS_MS = 6 * 60 * 60 * 1000;
   setInterval(() => {
-    runDailyBackupSnapshot();
-  }, 24 * 60 * 60 * 1000);
+    runBackupSnapshot();
+  }, SIX_HOURS_MS);
 }
 
 // Connect to MongoDB and start server
@@ -440,8 +510,8 @@ async function start() {
 
     await seedDatabaseIfEmpty();
 
-    // Start background daily snapshot daemon
-    initDailyBackupDaemon();
+    // Start background 6-hour snapshot daemon
+    initSixHourBackupDaemon();
 
     app.listen(PORT, '0.0.0.0', () => {
       console.log(`personal-ledger server running on http://0.0.0.0:${PORT}`);

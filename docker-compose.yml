@@ -26,7 +26,7 @@ services:
       - ./backend/server.js:/app/server.js:ro
       - ./backup-jsons:/app/backup-jsons:rw
     ports:
-      - "0.0.0.0:8080:8080"
+      - "127.0.0.1:8080:8080"
     depends_on:
       - mongo
     security_opt:
