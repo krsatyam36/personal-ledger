@@ -8,30 +8,23 @@ A personal finance tracker application designed for offline-first operation with
 
 The system follows a two-tier architecture:
 
-- **Frontend**: Static HTML/JS application running under nginx, supporting IndexedDB and localStorage for offline data persistence
-- **Backend**: Express API server with MongoDB persistence, handling CRUD operations, CSV exports, and daily snapshot backups
+**Frontend**: Static HTML/JS application running under nginx, supporting IndexedDB and localStorage for offline data persistence
 
-```mermaid
-flowchart LR
-    subgraph Client [Browser / NGINX]
-        direction LR
-        IDB [IndexedDB Store: photos, tasks]
-        LS [localStorage: budget, PIN, themes, scratchpad]
-        UI [React-like DOM UI]
-    end
+**Backend**: Express API server with MongoDB persistence, handling CRUD operations, CSV exports, and daily snapshot backups
 
-    subgraph Server [API Server]
-        direction LR
-        REST [Express REST Endpoints]
-        Mongoose [Mongoose Models: Task, Photo, Meta]
-        Mongo [MongoDB Atlas/Local]
-        FS [Filesystem: daily JSON backups]
-    end
+### Data Flow
 
-    UI <--> REST <--> Mongoose <--> Mongo
-    IDB <-->|savePhotoBlob, getPhotoBlob| REST
-    LS <-->|budget, PIN persistence| Server
-```
+- **Browser → IndexedDB/localStorage**: Instant offline storage for tasks, photos, budget, PIN, themes
+- **Browser → API (HTTP)**: CRUD operations, CSV export, backup/restore, model chat
+- **API → MongoDB**: Persistent database for all tasks, photos, metadata, backup snapshots
+- **API → Filesystem**: Daily JSON backup snapshots (7-day retention pruning)
+
+### Storage Layers (Priority Order)
+
+1. **IndexedDB** (`PocketLedgerDB` objectStore: `photos`, `tasks`) - Browser persistent, survives restarts
+2. **localStorage** (`pkt_*` keys) - Budget, PIN, themes, scratchpad tasks
+3. **MongoDB** (via Express API) - All tasks, photos, meta, version, recurring, budget
+4. **Disk backups** (`backup-jsons/`) - Automated daily snapshots, 7-day retention
 
 ---
 
@@ -41,7 +34,7 @@ flowchart LR
 
 | Field | Type | Description |
 |-------|------|-------------|
-| `id` | String | Unique transaction ID (generated: `tx_` + timestamp + random) |
+| `id` | String | Unique transaction ID (`tx_` + timestamp + random) |
 | `text` | String | Transaction description/merchant name |
 | `done` | Boolean | Whether the transaction is settled/done |
 | `amount` | Number | Amount in INR (supports `1.5k` → `1500` parsing) |
@@ -59,7 +52,7 @@ flowchart LR
 | Field | Type | Description |
 |-------|------|-------------|
 | `id` | String | Unique photo identifier |
-| `base64` | String | Compressed base64-encoded JPEG image |
+| `base64` | String | Compressed base64-encoded JPEG image (quality 0.72) |
 
 ### Meta Schema
 
@@ -71,46 +64,44 @@ flowchart LR
 
 ---
 
-## Feature Workflow
+## Feature Workflows
 
 ### 1. Adding a New Transaction
 
-```mermaid
-flowchart TD
-    A[User taps FAB +] --> B[Expense sheet opens]
-    B --> C[User enters: title, amount, date, tags]
-    C --> D{Is Lent?}
-    D -- Yes --> E[Show borrower name field]
-    D -- No --> F[Skip borrower field]
-    E --> G[User adds optional receipt photos]
-    G -->| compressReceipt() | H[Base64 compress → JPEG 0.72 quality]
-    H --> I[stagedPhotos array]
-    I --> J[Save Entry → POST /api/tasks]
-    J --> K[Task saved to MongoDB]
-    K --> L[IndexedDB cache updated]
-    L --> M[LEDGER feed refreshes]
-    M --> N[Wallet hero updates: total, progress bar]
+```flow
+A[User taps FAB +] --> B[Expense sheet opens]
+B --> C[User enters: title, amount, date, tags]
+C --> D{Is Lent?}
+D -- Yes --> E[Show borrower name field]
+D -- No --> F[Skip borrower field]
+E --> G[User adds optional receipt photos]
+G -->|compressReceipt()| H[Base64 compress → JPEG 0.72 quality]
+H --> I[stagedPhotos array]
+I --> J[Save Entry → POST /api/tasks]
+J --> K[Task saved to MongoDB]
+K --> L[IndexedDB cache updated]
+L --> M[LEDGER feed refreshes]
+M --> N[Wallet hero updates: total, progress bar]
 ```
 
-**Amount parsing** (`parseAmount`): Accepts `377`, `6.5k`, `₹1,200`, all converted to numeric paise/units.
+**Amount parsing** (`parseAmount`): Accepts `377`, `6.5k`, `₹1,200`, all converted to numeric units.
 
 **Smart tag autofill** (`handleTxTitleAutofill`): Scans existing tasks for matching merchant text and auto-selects the previously used hashtag.
 
 ### 2. Photo Handling & Storage
 
-Dual-storage strategy with backend API as primary, IndexedDB/localStorage as fallback:
+**Dual-storage strategy** with backend API as primary, IndexedDB/localStorage as fallback:
 
-```mermaid
-flowchart TD
-    A[User selects receipt photo] --> B[compressReceipt: canvas draw, JPEG 0.72 quality]
-    B --> C{API /api/photos POST?}
-    C -- Success --> D[Save base64 to MongoDB via API]
-    D --> E[Cache copy in IndexedDB]
-    C -- Fail --> F{Fallback?}
-    F -- db exists --> G[Save to IndexedDB objectStore 'photos']
-    F -- no db --> H[Save to localStorage as img_{id}]
-    G & H --> I[Return true]
-    I --> J[Display in staged-photos-strip]
+```flow
+A[User selects receipt photo] --> B[compressReceipt: canvas draw, JPEG 0.72 quality]
+B --> C{API /api/photos POST?}
+C -- Success --> D[Save base64 to MongoDB via API]
+D --> E[Cache copy in IndexedDB]
+C -- Fail --> F{Fallback?}
+F -- db exists --> G[Save to IndexedDB objectStore 'photos']
+F -- no db --> G[Save to localStorage as img_{id}]
+G --> I[Return true]
+I --> J[Display in staged-photos-strip]
 ```
 
 **Retrieval priority**: API → IndexedDB → localStorage
@@ -126,7 +117,7 @@ Tasks are grouped by date (`day-section`), each containing transaction cards (`c
 - **Tag badges**: Colored pill-shaped category tags
 - **Multi-thumbnail strip**: Up to 3 receipt photos per transaction card
 
-### 4. AI Analyst Features
+### 3. AI Analyst Features
 
 Three interactive pills generate data payloads:
 
@@ -140,37 +131,36 @@ Three interactive pills generate data payloads:
 
 **Edge Gallery payload** (`copyEdgePayload`): Serializes tasks + meta into a format compatible with Google's AI Edge Gallery / Gemma models for on-device analysis.
 
-### 5. PIN Security
+### 4. PIN Security
 
 - PIN stored in `localStorage` (`pkt_pin`) or `IndexedDB`
 - On app start: if PIN exists, lock screen is displayed
 - `verifyPin(val)`: compares 4-digit input against stored PIN
 - `togglePinSecurity()`: enable/disable PIN from settings drawer
 
-### 6. Theming
+### 5. Theming
 
 Three preset themes controlled via `data-theme` attribute on `<body>`:
 
 | Theme | Variables |
 |-------|-----------|
-| `dark` | Default dark mode (--bg: #0b0d14) |
-| `amoled` | Pure black (#000000) for maximum OLED savings |
-| `nord` | Nord color palette (--bg: #242933) |
+| `dark` | Default dark mode (`--bg: #0b0d14`) |
+| `amoled` | Pure black (`#000000`) for maximum OLED savings |
+| `nord` | Nord color palette (`--bg: #242933`) |
 
-### 7. Daily Automatic Backups
+### 6. Daily Automatic Backups
 
 **Backup daemon** runs on server startup then every 24 hours via `setInterval`:
 
-```mermaid
-flowchart TD
-    A[Server starts] --> B[seedDatabaseIfEmpty()]
-    B --> C[initDailyBackupDaemon()]
-    C --> D[runDailySnapshot() immediately]
-    D --> E[Fetch tasks, photos, meta from MongoDB]
-    E --> F[Construct snapshot JSON]
-    F --> G[Write to backup-jsons/pocket_ledger_backup_YYYY-MM-DD.json]
-    G --> H[Retention: keep last 7 daily files, prune older]
-    H --> I[Log: "Saved daily snapshot: ... (N tasks, M photos)"]
+```flow
+A[Server starts] --> B[seedDatabaseIfEmpty()]
+B --> C[initDailyBackupDaemon()]
+C --> D[runDailySnapshot() immediately]
+D --> E[Fetch tasks, photos, meta from MongoDB]
+E --> F[Construct snapshot JSON]
+F --> G[Write to backup-jsons/pocket_ledger_backup_YYYY-MM-DD.json]
+G --> H[Retention: keep last 7 daily files, prune older]
+H --> I[Log: "Saved daily snapshot: ... (N tasks, M photos)"]
 ```
 
 **Snapshot contents**:
@@ -181,7 +171,7 @@ flowchart TD
 
 **Retention policy**: Automatically deletes files beyond the 7 most recent daily backups.
 
-### 8. CSV Tax Export
+### 7. CSV Tax Export
 
 **Endpoint**: `GET /api/export/csv`
 
@@ -195,18 +185,18 @@ Each row is written via `res.write()` for streaming, then `res.end()`. Includes:
 - Borrower name (when applicable)
 - Settled status (Yes/No)
 
-### 9. Settings & Data Drawer
+### 8. Settings & Data Drawer
 
 Accessible via ⚙️ header button. Features:
 
-- **Theme switching**: dark / amoled / nord
-- **PIN lock**: enable/disable 4-digit app lock
-- **Export Spreadsheet**: downloads CSV via `/api/export/csv`
-- **Full Backup (with Photos)**: triggers `exportFullJsonBackup()` → downloads JSON snapshot
-- **Restore from Backup**: file upload → `importFullJsonBackup()`
-- **Data disclaimer**: "Pocket Ledger · 100% Offline Device Storage"
+- Theme switching: dark / amoled / nord
+- PIN lock: enable/disable 4-digit app lock
+- Export Spreadsheet: downloads CSV via `/api/export/csv`
+- Full Backup (with Photos): triggers `exportFullJsonBackup()` → downloads JSON snapshot
+- Restore from Backup: file upload → `importFullJsonBackup()`
+- Data disclaimer: "Pocket Ledger · 100% Offline Device Storage"
 
-### 10. Bottom Navigation Tabs
+### 9. Bottom Navigation Tabs
 
 Four-tab interface with persistent state:
 
@@ -223,11 +213,11 @@ Tab selection persists via URL hash and localStorage; active panel is toggled vi
 
 ## Offline-First Strategy
 
-1. **All CRUD operations** first attempt API calls, then fall back to localStorage/IndexedDB
-2. **Photo storage**: API → IndexedDB → localStorage fallback chain
-3. **Task recovery**: On startup, tries `/api/tasks` first; if unavailable, restores from `localStorage.pkt_tasks` or `localStorage.v_tasks` with hardcoded recovery entries
-4. **Budget/pin/theme**: Stored in `localStorage` with `pkt_` prefix
-5. **PIN security**: Optional; if not set, app starts unlocked
+- All CRUD operations first attempt API calls, then fall back to localStorage/IndexedDB
+- Photo storage: API → IndexedDB → localStorage fallback chain
+- Task recovery: On startup, tries `/api/tasks` first; if unavailable, restores from `localStorage.pkt_tasks` or `localStorage.v_tasks` with hardcoded recovery entries
+- Budget/pin/theme: Stored in `localStorage` with `pkt_` prefix
+- PIN security: Optional; if not set, app starts unlocked
 
 ---
 
@@ -296,3 +286,64 @@ Seeded data includes `Meta` (budget, recurring, version) and `Tasks` + `Photos` 
 - MongoDB (local or Atlas)
 - Docker (optional, for docker-compose setup)
 - Browser with IndexedDB support (Chrome, Firefox, Edge, Safari)
+
+---
+
+## About
+
+Personal Ledger created to deliver as per my needs
+
+### Resources
+
+- [README](README.md)
+- [Activity](#)
+- [Stars](https://github.com/krsatyam36/personal-ledger/stargazers)
+- [Watchers](https://github.com/krsatyam36/personal-ledger/watchers)
+- [Forks](https://github.com/krsatyam36/personal-ledger/forks)
+
+### Releases
+
+- [v1.0.0](https://github.com/krsatyam36/personal-ledger/tags) - Initial public release with sanitized data
+
+### Packages
+
+No packages published
+
+### Contributors
+
+- [@krsatyam36](https://github.com/krsatyam36) - krsatyam36newton4th
+
+### Languages
+
+- HTML: 85%
+- JavaScript: 14.3%
+- Dockerfile: 0.7%
+
+### Suggested Workflows
+
+- Publish Node.js Package to GitHub Packages
+- Jekyll using Docker image
+- SLSA Generic generator
+
+---
+
+## Quick Start
+
+```bash
+# 1. Start infrastructure
+docker-compose up -d
+
+# 2. Wait for MongoDB + API to initialize (~30 seconds)
+#    - Seed runs automatically if DB is empty
+#    - Backup JSONs in backup-jsons/ are loaded
+
+# 3. Access the app
+open http://localhost:8080
+
+# 4. Start using!
+# - Add transactions via FAB +
+# - View AI Analyst pills
+# - Manage PIN security via ⚙️
+# - Export CSV data
+# - Take/review receipt photos
+```
