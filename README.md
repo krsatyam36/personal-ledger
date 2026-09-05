@@ -293,6 +293,114 @@ Seeded data includes `Meta` (budget, recurring, version) and `Tasks` + `Photos` 
 
 Personal Ledger created to deliver as per my needs
 
+---
+
+## How to Run Pocket Ledger
+
+### Option 1: Using Docker Compose (Recommended)
+
+This is the easiest way to get the full app running with MongoDB, API, and NGINX:
+
+```bash
+# 1. Clone the repo (or cd to your project folder)
+cd personal-ledger
+
+# 2. Start all services
+docker-compose up -d
+
+# 3. Wait ~30 seconds for services to start and seed
+#    - MongoDB will initialize
+#    - API will connect to MongoDB
+#    - Seed will load backup data if DB is empty
+
+# 4. Access the app
+open http://localhost:8080
+
+# 5. Verify it's working
+curl http://localhost:8080/api/meta
+# Expected: {"budget":36500,"recurring":[],"version":9}
+```
+
+### Option 2: Manual Backend + Frontend
+
+If you prefer running the backend directly:
+
+```bash
+# 1. Start MongoDB (separately or via Docker)
+mongod --dbpath ./data --port 27017
+
+# 2. Start the Node.js backend
+cd backend
+npm install          # if not already installed
+node server.js
+
+# 3. The API will be available at
+open http://localhost:8080
+
+# 4. Open the frontend in your browser
+#    - Either: open src/index.html directly
+#    - Or: configure your web server to serve src/ as static files
+```
+
+### Option 3: Development Mode (No Docker)
+
+```bash
+# 1. Ensure MongoDB is running (local or Atlas)
+mongod --port 27017  # or connect to Atlas
+
+# 2. Install dependencies
+cd backend && npm install
+
+# 3. Start the server
+node server.js
+
+# 3. Open src/index.html in your browser
+#    - Or use a simple server: npx serve src/
+```
+
+### Option 4: Docker (Podman)
+
+```bash
+# If you have Podman instead of Docker
+podman-compose up -d
+# or manually:
+podman build -t localhost/pocket-ledger-api:latest -f backend/Dockerfile .
+podman run -d -p 8080:8080 --name pocket_ledger_mongo docker.io/library/mongo:6-jammy
+podman run -d -p 0.0.0.0:8080:8080 --name pocket_ledger_api \
+  -e PORT=8080 \
+  -e MONGO_URI=mongodb://mongo:27017/personal_ledger \
+  -e STATIC_PATH=/app/src \
+  -v ./src:/app/src:ro \
+  -v ./backend/server.js:/app/server.js:ro \
+  -v ./backup-jsons:/app/backup-jsons:rw \
+  localhost/pocket-ledger-api:latest
+```
+
+---
+
+### After Running
+
+The app will be accessible at `http://localhost:8080` (or your server IP on port 8080).
+
+**Default login**: No PIN required if you haven't set one up.
+**Default budget**: ₹36,500 (from your backup data)
+**Default features**: 
+- AI Analyst pills (Month Breakdown, Top Expenses, Daily Burn Rate)
+- PIN security (optional - set via ⚙️ Settings)
+- Daily automatic backups (runs every 24h)
+- CSV export (`/api/export/csv`)
+- Photo capture & storage
+
+### Troubleshooting
+
+| Issue | Solution |
+|-------|----------|
+| "Site can't be reached" | Ensure Docker is running (`docker ps`) or backend is running (`node server.js`) |
+| API returns 404 | Check `STATIC_PATH` env variable matches your folder structure |
+| Photos not displaying | Ensure MongoDB is running and backup JSONs have photo data |
+| "Connection refused" on port 8080 | Check no other service is using port 8080, or change PORT env var |
+| Data not persisting | Ensure Docker volume `personal-ledger_mongo_data` persists, or IndexedDB/localStorage is not cleared |
+
 ### Resources
 
 - [README](README.md)
