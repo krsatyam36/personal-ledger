@@ -1191,7 +1191,7 @@
           <button type="submit" class="btn-circle" style="background:var(--accent); color:white; border:none;">➤</button>
         </form>
 
-        <button class="btn-circle" onclick="endLlmChat()" style="position:fixed; bottom:140px; right:20px; width:36px; height:36px; background:rgba(245,158,11,0.2); border:1px solid rgba(245,158,11,0.4); color:#fbbf24; font-size:1rem; display:none; align-items:center; justify-content:center; z-index:50;">⏹</button>
+        <button class="btn-circle" id="endChatBtn" onclick="endLlmChat()" style="position:fixed; bottom:140px; right:20px; width:36px; height:36px; background:rgba(245,158,11,0.2); border:1px solid rgba(245,158,11,0.4); color:#fbbf24; font-size:1rem; display:none; align-items:center; justify-content:center; z-index:50;" title="Stop AI Chat">⏹</button>
       </div>
     </section>
 
@@ -2679,13 +2679,14 @@ Analyze:
     function appendChatMessage(chat, role, content) {
       const msg = { role, content };
       chat.messages.push(msg);
-      saveChatHistory(loadChatHistory()); // save after push
+      saveChatHistory(loadChatHistory());
+      // Render in DOM
+      appendChat(role, content);
       return msg;
     }
 
     function renderChatHistoryUI() {
-      // Could be used to show a sidebar of past chats
-      // For now, just ensure new chat starts fresh
+      // Future: load chat sessions sidebar
     }
 
     async function startLlmChat() {
@@ -2704,78 +2705,90 @@ Analyze:
       const modelStatus = document.getElementById('modelStatus');
       const modelPreview = document.getElementById('modelPreview');
       const chatWelcome = document.getElementById('chatWelcome');
-      const llmChatForm = document.getElementById('llmChatForm');
       const modelSelectorElem = document.getElementById('modelSelector');
 
       modelStatus.textContent = 'Running ' + model;
       modelStatus.style.color = 'var(--accent)';
-      modelPreview.style.display = 'none';
-      modelSelectorElem.style.display = 'none';
-      chatWelcome.style.display = 'none';
+      if (modelPreview) modelPreview.style.display = 'none';
+      if (modelSelectorElem) modelSelectorElem.style.display = 'none';
+      if (chatWelcome) chatWelcome.style.display = 'none';
 
       // Show end chat button
-      const endBtn = document.querySelector('button.btn-circle[onclick="endLlmChat()"]');
+      const endBtn = document.getElementById('endChatBtn');
       if (endBtn) endBtn.style.display = 'flex';
 
       // Auto-focus input
       const input = document.getElementById('aiUserInput');
       if (input) input.focus();
 
-      // Send initial system prompt to set context
-      const systemMsg = `You are a helpful financial assistant for a personal ledger app. The user has access to their transaction data. Keep responses concise and helpful.`;
-      await sendToOllama(systemMsg, chat);
-
-      // Append bot intro
-      appendChatMessage(chat, 'bot', `🤖 Model <strong>${model}</strong> ready. I'm your private on-device AI financial analyst. Ask me about your transactions, categories, budget, or anything financial!`);
+      // Send greeting
+      appendChatMessage(chat, 'bot', `🤖 Model <strong>${escapeHTML(model)}</strong> connected. I'm your private on-device AI financial analyst with direct context of your transactions and budget. Ask me anything!`);
     }
 
     async function endLlmChat() {
-      const selector = document.getElementById('modelSelector');
       const modelStatus = document.getElementById('modelStatus');
       const modelPreview = document.getElementById('modelPreview');
       const chatWelcome = document.getElementById('chatWelcome');
-      const llmChatForm = document.getElementById('llmChatForm');
       const modelSelectorElem = document.getElementById('modelSelector');
-      const endBtn = document.querySelector('button.btn-circle[onclick="endLlmChat()"]');
+      const endBtn = document.getElementById('endChatBtn');
 
-      modelStatus.textContent = 'Stopped';
-      modelStatus.style.color = 'var(--text-muted)';
-      modelPreview.style.display = 'none';
-      modelSelectorElem.style.display = 'inline-block';
-      chatWelcome.style.display = 'block';
-
+      if (modelStatus) {
+        modelStatus.textContent = 'Stopped';
+        modelStatus.style.color = 'var(--text-muted)';
+      }
+      if (modelPreview) modelPreview.style.display = 'none';
+      if (modelSelectorElem) modelSelectorElem.style.display = 'inline-block';
+      if (chatWelcome) chatWelcome.style.display = 'block';
       if (endBtn) endBtn.style.display = 'none';
 
       // Reset current chat
       currentChatId = null;
       currentModel = '';
+      appendChat('bot', '<em>Chat session ended. History saved. Select a model to start again.</em>');
     }
 
-    async function sendToOllama(message, chat) {
+    async function sendToOllama(prompt, chat) {
       try {
+        // Build financial context summary for the LLM
+        const summary = buildMonthlySummaryPayload();
+        const systemPrompt = `You are a private financial assistant for Pocket Ledger.
+User's financial status:
+- Current Month: ${summary.month}
+- Total Spend This Month: ₹${summary.total}
+- Monthly Budget Limit: ₹${budgetLimit}
+- Total Transactions Logged: ${summary.count}
+- Number of Transactions: ${tasks.length}
+Give concise, helpful, and direct answers in plain text or simple HTML formatting without markdown headers.`;
+
+        // Format message history
+        const messages = [
+          { role: 'system', content: systemPrompt },
+          ...chat.messages.slice(-10).map(m => ({
+            role: m.role === 'bot' ? 'assistant' : 'user',
+            content: m.content.replace(/<[^>]*>/g, '') // strip HTML for model input
+          }))
+        ];
+
         const res = await fetch('http://localhost:11434/api/chat', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             model: currentModel,
-            messages: [
-              ...chat.messages.map(m => ({ role: m.role, content: m.content })).reverse(), // most recent first
-              { role: 'user', content: message }
-            ],
+            messages: messages,
             stream: false
           })
         });
 
         if (!res.ok) {
           const errTxt = await res.text();
-          throw new Error(`Ollama API error: ${res.status} - ${errTxt}`);
+          throw new Error(`Ollama HTTP ${res.status}: ${errTxt}`);
         }
 
         const data = await res.json();
-        return data.message?.content || 'No response from model';
+        return data.message?.content || 'No response from model.';
       } catch (err) {
         console.error('Error communicating with Ollama:', err);
-        return `❌ Could not connect to Ollama. Is it running? (${err.message})`;
+        return `❌ Ollama error: ${err.message}. Make sure Ollama is running (\`ollama serve\`).`;
       }
     }
 
@@ -2786,36 +2799,63 @@ Analyze:
       if (!q) return;
 
       haptic();
-      appendChatMessage(getActiveChat(), 'user', escapeHTML(q));
       inp.value = '';
 
       const chat = getActiveChat();
-      if (!chat) {
-        appendChatMessage({} , 'bot', '⚠️ No active chat session. Click "Start Chat" first.');
+      if (!chat || !currentModel) {
+        // Fallback to offline rule-based analyst if no Ollama session is running
+        handleAiChatQuery(q);
         return;
       }
 
-      // Show thinking state
-      const botMsg = appendChatMessage(chat, 'bot', '🤔 Thinking...');
-      const bubble = botMsg; // will update content
+      // Add user message to UI and history
+      appendChatMessage(chat, 'user', escapeHTML(q));
+
+      // Append thinking bubble to feed
+      const feed = document.getElementById('aiChatFeed');
+      const thinkingDiv = document.createElement('div');
+      thinkingDiv.className = 'bubble bot';
+      thinkingDiv.innerHTML = '🤔 Thinking...';
+      feed.appendChild(thinkingDiv);
+      feed.scrollTop = feed.scrollHeight;
 
       // Send to Ollama
-      const response = await sendToOllama(q, chat);
+      const reply = await sendToOllama(q, chat);
 
-      // Update the thinking message with actual response
-      bubble.innerHTML = response;
-      bubble.className = 'bubble user'; // user bubble for model response? Actually model is assistant
-      // Fix: model responses should have bot class
-      bubble.className = 'bubble bot';
+      // Update thinking bubble with model response
+      thinkingDiv.innerHTML = reply.replace(/\n/g, '<br>');
+      chat.messages.push({ role: 'bot', content: reply });
+      saveChatHistory(loadChatHistory());
+      feed.scrollTop = feed.scrollHeight;
+    }
 
-      // Scroll to bottom
-      const box = document.getElementById('aiChatFeed');
-      box.scrollTop = box.scrollHeight;
+    function handleAiChatQuery(q) {
+      appendChat('user', escapeHTML(q));
+
+      // Feature 1: Check if user typed a hashtag in query (e.g. #groceries)
+      const hashtagMatch = q.match(/#([a-zA-Z0-9_-]+)/i);
+      if (hashtagMatch) {
+        const foundTag = hashtagMatch[1].toLowerCase();
+        setTimeout(() => {
+          triggerTagDeepDive(foundTag);
+        }, 150);
+        return;
+      }
+
+      const data = buildMonthlySummaryPayload();
+      setTimeout(() => {
+        let resp = `<strong>📊 Month Analysis (${data.month}):</strong><br><br>`;
+        resp += `• <strong>Total Spent:</strong> ₹${data.total.toLocaleString('en-IN')} across ${data.count} items.<br>`;
+        resp += `• <strong>Budget Status:</strong> ${data.total > budgetLimit ? '⚠️ Over budget!' : '✅ Within limit of ₹' + budgetLimit.toLocaleString('en-IN')}<br><br>`;
+        resp += `<em>💡 Pro-tip:</em> Tap <strong>"Start"</strong> with an Ollama model above for deep conversational insights, or tap any <strong>#tag</strong> pill above!`;
+        appendChat('bot', resp);
+      }, 300);
     }
 
     function updateModelPreview() {
       const select = document.getElementById('modelSelector');
       const preview = document.getElementById('modelPreview');
+      if (!select || !preview) return;
       const val = select.value;
       if (val) {
         preview.innerHTML = `<span style="font-size:0.78rem; color:var(--accent);">Selected: ${val}</span>`;
@@ -2829,10 +2869,12 @@ Analyze:
     (function() {
       const history = loadChatHistory();
       if (history && history.chats && history.chats.length > 0) {
-        // Could auto-resume last chat; for now just log
         console.log('LLM Chat history:', history.chats.length, 'saved sessions');
       }
     })();
+
+    // --- INITIALIZE ---
+    async function initializeApp() {
       await initDb();
 
       // Load meta (budget, recurring) from API if available
