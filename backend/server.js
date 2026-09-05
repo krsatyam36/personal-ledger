@@ -9,17 +9,25 @@ const PORT = process.env.PORT || 8080;
 const MONGO_URI = process.env.MONGO_URI || 'mongodb://mongo:27017/personal_ledger';
 
 // --- SECURITY HARDENING & DEFENSE IN DEPTH ---
-// 1. Strict CORS policy: Allow only local web frontend
-const allowedOrigins = [
-  'http://localhost:8080',
-  'http://127.0.0.1:8080',
-  'http://localhost:3000',
-  'http://127.0.0.1:3000'
-];
+// 1. Strict CORS policy: Allow localhost and private local network (LAN) access
+function isAllowedOrigin(origin) {
+  if (!origin) return true; // Non-browser clients, same-origin, curl, daemons
+  try {
+    const url = new URL(origin);
+    const host = url.hostname;
+    // Allow localhost / loopback
+    if (host === 'localhost' || host === '127.0.0.1') return true;
+    // Allow standard local LAN IP ranges (RFC 1918)
+    if (/^192\.168\.\d{1,3}\.\d{1,3}$/.test(host)) return true;
+    if (/^10\.\d{1,3}\.\d{1,3}\.\d{1,3}$/.test(host)) return true;
+    if (/^172\.(1[6-9]|2\d|3[0-1])\.\d{1,3}\.\d{1,3}$/.test(host)) return true;
+  } catch (e) {}
+  return false;
+}
+
 app.use(cors({
   origin: (origin, callback) => {
-    // Allow non-browser agents (like curl, background daemons) and local origins
-    if (!origin || allowedOrigins.includes(origin)) {
+    if (isAllowedOrigin(origin)) {
       return callback(null, true);
     }
     return callback(new Error('Blocked by CORS policy: Unauthorized origin.'));
