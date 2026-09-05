@@ -36,7 +36,6 @@ app.use(cors({
   allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With']
 }));
 
-// 2. Security Headers (Anti-Clickjacking, MIME-Sniffing, XSS protection)
 app.use((req, res, next) => {
   res.setHeader('X-Content-Type-Options', 'nosniff');
   res.setHeader('X-Frame-Options', 'DENY');
@@ -323,6 +322,42 @@ app.put('/api/meta/:key', async (req, res) => {
     res.json({ key: entry.key, value: entry.value });
   } catch (err) {
     res.status(500).json({ error: err.message });
+  }
+});
+
+// --- Ollama Reverse Proxy (Seamless local & LAN mobile access) ---
+const OLLAMA_BASE_URL = process.env.OLLAMA_HOST || 'http://172.17.0.1:11434';
+
+app.get('/api/ollama/tags', async (req, res) => {
+  try {
+    const fetchRes = await fetch(`${OLLAMA_BASE_URL}/api/tags`);
+    if (!fetchRes.ok) {
+      return res.status(fetchRes.status).json({ error: 'Ollama returned error' });
+    }
+    const data = await fetchRes.json();
+    res.json(data);
+  } catch (err) {
+    res.status(502).json({ error: `Could not connect to Ollama: ${err.message}` });
+  }
+});
+
+app.post('/api/ollama/chat', async (req, res) => {
+  try {
+    const fetchRes = await fetch(`${OLLAMA_BASE_URL}/api/chat`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(req.body)
+    });
+
+    if (!fetchRes.ok) {
+      const errText = await fetchRes.text();
+      return res.status(fetchRes.status).json({ error: `Ollama error: ${errText}` });
+    }
+
+    const data = await fetchRes.json();
+    res.json(data);
+  } catch (err) {
+    res.status(502).json({ error: `Failed to connect to Ollama daemon: ${err.message}` });
   }
 });
 

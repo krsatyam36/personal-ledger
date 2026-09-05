@@ -21,6 +21,9 @@ services:
       - PORT=8080
       - MONGO_URI=mongodb://mongo:27017/personal_ledger
       - STATIC_PATH=/app/src
+      - OLLAMA_HOST=http://host.docker.internal:11434
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     volumes:
       - ./src:/app/src:ro
       - ./backend/server.js:/app/server.js:ro

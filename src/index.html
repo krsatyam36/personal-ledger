@@ -2769,15 +2769,28 @@ Give concise, helpful, and direct answers in plain text or simple HTML formattin
           }))
         ];
 
-        const res = await fetch('http://localhost:11434/api/chat', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            model: currentModel,
-            messages: messages,
-            stream: false
-          })
-        });
+        const payload = {
+          model: currentModel,
+          messages: messages,
+          stream: false
+        };
+
+        let res;
+        try {
+          // 1. Try server-side Ollama proxy (works everywhere: localhost, LAN, phone)
+          res = await fetch('/api/ollama/chat', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+          });
+        } catch (netErr) {
+          // 2. Fallback to direct client connection if running standalone without server
+          res = await fetch('http://localhost:11434/api/chat', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+          });
+        }
 
         if (!res.ok) {
           const errTxt = await res.text();
@@ -2865,6 +2878,37 @@ Give concise, helpful, and direct answers in plain text or simple HTML formattin
       }
     }
 
+    async function loadOllamaModels() {
+      try {
+        let res;
+        try {
+          res = await fetch('/api/ollama/tags');
+        } catch (e) {
+          res = await fetch('http://localhost:11434/api/tags');
+        }
+        if (!res || !res.ok) return;
+        const data = await res.json();
+        if (data && Array.isArray(data.models) && data.models.length > 0) {
+          const select = document.getElementById('modelSelector');
+          if (!select) return;
+          const currentVal = select.value;
+          select.innerHTML = '<option value="">-- Select Ollama Model --</option>';
+          data.models.forEach(m => {
+            const opt = document.createElement('option');
+            opt.value = m.name;
+            const sizeGb = m.size ? ` (${(m.size / (1024 * 1024 * 1024)).toFixed(1)} GB)` : '';
+            opt.textContent = `${m.name}${sizeGb}`;
+            select.appendChild(opt);
+          });
+          if (currentVal && Array.from(select.options).some(o => o.value === currentVal)) {
+            select.value = currentVal;
+          }
+        }
+      } catch (err) {
+        console.warn('Could not auto-fetch Ollama models:', err);
+      }
+    }
+
     // Initialize: load any existing chat history on app start (quietly)
     (function() {
       const history = loadChatHistory();
@@ -2900,6 +2944,7 @@ Give concise, helpful, and direct answers in plain text or simple HTML formattin
       renderRecurringList();
       autoPostRecurring();
       renderLedgerFeed();
+      loadOllamaModels();
     }
 
     initializeApp();
